@@ -1,7 +1,11 @@
 from pathlib import Path
+from typing import Optional, Tuple
+
 import numpy as np
 import pandas as pd
-from tqdm.auto import tqdm  # <-- progress bar
+from tqdm.auto import tqdm
+
+import lcgen
 
 
 # -----------------------------
@@ -27,18 +31,19 @@ VALIDATE_LAMBDA = True  # set to True to run validation after simulating
 
 
 # -----------------------------
-# HELPERS
+# LOAD DATA
 # -----------------------------
 def _load_relative_probabilities(filepath: str):
     """
     Load daily cumulative storm probabilities by (Month, Day).
     Expects columns: 'Month', 'Day', 'Cumulative trop prob'.
     """
-    df = pd.read_csv(filepath)
-    cum_probs = df["Cumulative trop prob"].to_numpy()
-    months = df["Month"].to_numpy(dtype=int)
-    days = df["Day"].to_numpy(dtype=int)
-    return cum_probs, months, days
+    df = pd.read_csv(
+        filepath,
+        usecols=["Month", "Day", "Cumulative trop prob"],
+        dtype={"Month": int, "Day": int, "Cumulative trop prob": float},
+    )
+    return df
 
 
 def _load_storm_id_cdf(filepath: str):
@@ -46,17 +51,18 @@ def _load_storm_id_cdf(filepath: str):
     Load storm IDs and their probabilities from CHS master track.
     Expects columns: 'storm_ID', 'DSW' (or similar).
     """
-    df = pd.read_csv(filepath)
+    df = pd.read_csv(filepath, usecols=["storm_ID", "DSW"])
     df = df.sort_values(by="DSW").reset_index(drop=True)
 
-    weights = df["DSW"].to_numpy()
-    probs = weights / weights.sum()
-    cdf = np.cumsum(probs)
-    storm_ids = df["storm_ID"].to_numpy()
-
-    return cdf, storm_ids
+    total_weight = df["DSW"].sum()
+    df["probability"] = df["DSW"] / total_weight
+    df["cdf"] = np.cumsum(df["probability"])
+    return df
 
 
+# -----------------------------
+# SAMPLING
+# -----------------------------
 def _inverse_cdf_sample(u: np.ndarray, cdf: np.ndarray) -> np.ndarray:
     """
     Given uniform samples u in [0, 1), return indices into cdf such that
@@ -68,123 +74,6 @@ def _inverse_cdf_sample(u: np.ndarray, cdf: np.ndarray) -> np.ndarray:
     if np.any(over):
         idx[over] = last
     return idx
-
-
-def _thin_by_min_separation(times: np.ndarray, min_sep_days: float) -> np.ndarray:
-    """
-    Given sorted times (days since Jan 1), keep only events such that each kept
-    event is at least min_sep_days after the last kept one.
-
-    Returns indices into the original `times` array (after sorting).
-    """
-    n = times.size
-    if n == 0:
-        return np.empty(0, dtype=int)
-
-    keep = [0]
-    last_t = times[0]
-    for i in range(1, n):
-        if times[i] - last_t >= min_sep_days:
-            keep.append(i)
-            last_t = times[i]
-    return np.asarray(keep, dtype=int)
-
-
-def _estimate_lambda_eff(
-    lam_raw: float,
-    cum_probs: np.ndarray,
-    months: np.ndarray,
-    days: np.ndarray,
-    min_sep_days: float,
-    cdf: np.ndarray,
-    storm_ids: np.ndarray,
-    init_year: int,
-    duration_years_cal: int = 30,
-    num_lcs_cal: int = 30,
-) -> float:
-    """
-    Estimate the effective lambda (mean storms/year) produced by simulate_lifecycle
-    when using lam_raw. Uses a smaller calibration run for speed.
-    """
-    dfs = []
-    for lc in range(num_lcs_cal):
-        df = simulate_lifecycle(
-            lifecycle_index=lc,
-            init_year=init_year,
-            duration_years=duration_years_cal,
-            lam=lam_raw,
-            cum_probs=cum_probs,
-            months=months,
-            days=days,
-            min_sep_days=min_sep_days,
-            cdf=cdf,
-            storm_ids=storm_ids,
-            show_progress=False,
-        )
-        dfs.append(df)
-
-    if not dfs:
-        return 0.0
-
-    df_all = pd.concat(dfs, ignore_index=True)
-    counts = compute_storm_counts(df_all)  # helper from earlier
-    return float(counts["n_storms"].mean())
-
-
-def calibrate_lam_raw_with_simulator(
-    lambda_target: float,
-    cum_probs: np.ndarray,
-    months: np.ndarray,
-    days: np.ndarray,
-    min_sep_days: float,
-    cdf: np.ndarray,
-    storm_ids: np.ndarray,
-    init_year: int,
-) -> float:
-    """
-    Binary search lam_raw so that the simulate_lifecycle output
-    has mean storms/year ≈ lambda_target.
-    """
-    lam_low = max(1e-6, lambda_target * 0.5)
-    lam_high = lambda_target * 3.0
-
-    # ensure upper bound is high enough
-    for _ in range(5):
-        mean_high = _estimate_lambda_eff(
-            lam_high,
-            cum_probs,
-            months,
-            days,
-            min_sep_days,
-            cdf,
-            storm_ids,
-            init_year,
-        )
-        if mean_high >= lambda_target:
-            break
-        lam_high *= 2.0
-
-    for _ in range(12):  # 2^12 ≈ 4096, enough precision
-        mid = 0.5 * (lam_low + lam_high)
-        mean_mid = _estimate_lambda_eff(
-            mid,
-            cum_probs,
-            months,
-            days,
-            min_sep_days,
-            cdf,
-            storm_ids,
-            init_year,
-        )
-
-        if mean_mid < lambda_target:
-            lam_low = mid
-        else:
-            lam_high = mid
-
-    lam_raw = 0.5 * (lam_low + lam_high)
-    print(f"[calibration] lam_raw={lam_raw:.4f} gives mean ≈ {lambda_target}")
-    return lam_raw
 
 
 # -----------------------------
@@ -231,25 +120,20 @@ def simulate_lifecycle(
     init_year: int,
     duration_years: int,
     lam: float,
-    cum_probs: np.ndarray,
-    months: np.ndarray,
-    days: np.ndarray,
     min_sep_days: float,
-    cdf: np.ndarray,
-    storm_ids: np.ndarray,
+    relative_probs_df: pd.DataFrame,
+    storm_set: pd.DataFrame,
     show_progress: bool = False,
+    rng: Optional[np.random.Generator] = None,
 ) -> pd.DataFrame:
     """
-    Simulate one lifecycle:
+    Simulate one lifecycle using day-of-year indexing:
 
-    - For each year:
-      1) Draw N ~ Poisson(lam) candidate storms.
-      2) Sample calendar-based timing (month/day/hour) using cum_probs/months/days.
-      3) Build within-year times t (in days), sort, and thin by min_sep_days.
-      4) For the kept events, sample storm IDs from the CHS storm-ID CDF.
-
-    Returns a DataFrame with one row per kept storm event.
+    Returns a DataFrame with one row per storm event.
     """
+    if rng is None:
+        rng = np.random.default_rng()
+
     records: list[dict] = []
 
     year_iter = range(duration_years)
@@ -258,62 +142,48 @@ def simulate_lifecycle(
 
         year_iter = tqdm(year_iter, desc=f"LC {lifecycle_index}")
 
-    rand = RNG.random  # local alias for speed
+    rand = rng.random
 
     for year_offset in year_iter:
         year = init_year + year_offset
 
-        # 1) Number of storms this year
-        n_events = RNG.poisson(lam)
+        # 1) Sample for the number of storms this year
+        n_events = rng.poisson(lam)
         if n_events == 0:
             continue
 
-        # 2) Sample calendar-based timing (month/day/hour) once
-        #    Use cum_probs/months/days for seasonality
-        u_time = rand(n_events)
-        idx_time = _inverse_cdf_sample(u_time, cum_probs)
+        # 2) Day-of-year + hour with min separation (no thinning)
+        doy, hour, t, month, day = lcgen.sampling.sample_year_events(
+            lam=lam,
+            cdf_day=cdf_day,
+            min_sep_days=min_sep_days,
+            year=year,
+            rng=rng,
+        )
 
-        mo = months[idx_time]
-        da = days[idx_time]
-        hour = rand(n_events) * 24.0
-
-        # 3) Build within-year time, sort, and thin by min separation
-        t = da + hour / 24.0
-        order = np.argsort(t)
-
-        t = t[order]
-        mo = mo[order]
-        da = da[order]
-        hour = hour[order]
-
-        keep_idx = _thin_by_min_separation(t, min_sep_days)
-        if keep_idx.size == 0:
-            # All events were too close together in this realization
+        n_kept = doy.size
+        if n_kept == 0:
             continue
 
-        t = t[keep_idx]
-        mo = mo[keep_idx]
-        da = da[keep_idx]
-        hour = hour[keep_idx]
-        n_kept = keep_idx.size
-
-        # 4) For those *same* events, sample storm IDs via storm CDF
+        # 3) populate Storm IDs
         u_id = rand(n_kept)
-        idx_id = _inverse_cdf_sample(u_id, cdf)
+        idx_id = np.searchsorted(storm_set["cdf"], u_id, side="right")
+        sid = storm_set["storm_ID"][idx_id]
+        rcdf = storm_set["cdf"][idx_id]
 
-        sid = storm_ids[idx_id]
-        rcdf = cdf[idx_id]
-
-        # Collect rows
+        # 4) Convert day_idx -> month/day for outputs (if desired)
+        base = datetime(year, 1, 1)
         for k in range(n_kept):
+            dt = base + timedelta(days=int(day_idx[k]) - 1, hours=float(hour[k]))
             records.append(
                 {
                     "lifecycle": lifecycle_index,
                     "year_offset": year_offset,
                     "year": year,
-                    "month": int(mo[k]),
-                    "day": int(da[k]),
-                    "hour": float(hour[k]),
+                    "day_of_year": int(day_idx[k]),
+                    "month": dt.month,
+                    "day": dt.day,
+                    "hour": dt.hour + dt.minute / 60.0 + dt.second / 3600.0,
                     "storm_id": int(sid[k]),
                     "rcdf": float(rcdf[k]),
                 }
@@ -327,10 +197,8 @@ def simulate_lifecycle(
 # -----------------------------
 def main():
     OUTPUT_DIRECTORY.mkdir(parents=True, exist_ok=True)
-
-    # Load inputs
-    cum_probs, months, days = _load_relative_probabilities(REL_PROB_FILE)
-    cdf, storm_ids = _load_storm_id_cdf(STORM_ID_PROB_FILE)
+    relative_probs: pd.DataFrame = _load_relative_probabilities(REL_PROB_FILE)
+    storm_set: pd.DataFrame = _load_storm_id_cdf(STORM_ID_PROB_FILE)
 
     # Columns for split outputs
     cols = [
@@ -344,49 +212,39 @@ def main():
         "rcdf",
     ]
 
-    # 1) Calibrate lam_raw automatically
-    lam_raw = calibrate_lam_raw_with_simulator(
-        lambda_target=LAM_TARGET,
-        cum_probs=cum_probs,
-        months=months,
-        days=days,
-        min_sep_days=MIN_ARRIVAL_TROP_DAYS,
-        cdf=cdf,
-        storm_ids=storm_ids,
-        init_year=INITIALIZE_YEAR,
-    )
+    all_dfs: list[pd.DataFrame] = []
 
-    # 2) Full simulation using calibrated lam_raw
-    all_dfs = []
+    # Full simulation using calibrated lambda
     for lc in range(NUM_LCS):
         df = simulate_lifecycle(
             lifecycle_index=lc,
             init_year=INITIALIZE_YEAR,
             duration_years=LIFECYCLE_DURATION,
-            lam=lam_raw,
-            cum_probs=cum_probs,
-            months=months,
-            days=days,
+            lam=LAM_TARGET,
             min_sep_days=MIN_ARRIVAL_TROP_DAYS,
-            cdf=cdf,
-            storm_ids=storm_ids,
+            relative_probs_df=relative_probs,
+            storm_set=storm_set,
+            # cum_probs_day=cum_probs_day,
+            # cdf=cdf,
+            # storm_ids=storm_ids,
             show_progress=False,
         )
-        df_ids = df[cols]
+
+        # Keep only the ID / timing columns for outputs
+        df_ids = df[cols].copy()
+        all_dfs.append(df_ids)
+
         ids_path = OUTPUT_DIRECTORY / f"EventDate_LC_{lc}.csv"
         df_ids.to_csv(ids_path, index=False)
 
     if VALIDATE_LAMBDA:
-        # Concatenate all lifecycles for validation
-        all_dfs = []
-        for lc in range(NUM_LCS):
-            ids_path = OUTPUT_DIRECTORY / f"EventDate_LC_{lc}.csv"
-            df_lc = pd.read_csv(ids_path)
-            all_dfs.append(df_lc)
-        df_all = pd.concat(all_dfs, ignore_index=True)
-
-        counts = compute_storm_counts(df_all)
-        verify_lambda(counts, LAM_TARGET)
+        # Concatenate all lifecycles for validation (use in-memory frames)
+        if all_dfs:
+            df_all = pd.concat(all_dfs, ignore_index=True)
+            counts = compute_storm_counts(df_all)
+            verify_lambda(counts, LAM_TARGET)
+        else:
+            print("[warn] No lifecycle data generated; skipping lambda validation.")
 
 
 if __name__ == "__main__":
