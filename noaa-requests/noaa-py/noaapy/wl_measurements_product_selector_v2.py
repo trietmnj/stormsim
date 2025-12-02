@@ -1,44 +1,32 @@
 def wl_measurements_product_selector_v2(d_struct, prod):
-    # Products List
+    """
+    Given the station's list of available WL products and a product name,
+    return:
+        flag2 : 0 if station has the product, 1 otherwise
+        flag1 : short code ('m', '1', '6', '6p', 'hilo')
+        indx  : list of indices where this product appears
+    """
+
+    # Mapping of product names → short flags
+    product_flags = {
+        "Verified Monthly Mean Water Level": "m",
+        "Verified Hourly Height Water Level": "1",
+        "Verified 6-Minute Water Level": "6",
+        "Preliminary 6-Minute Water Level": "6p",
+        "Verified High/Low Water Level": "hilo",
+    }
+
+    if prod not in product_flags:
+        raise ValueError(f"Product not recognized: {prod!r}")
+
+    flag1 = product_flags[prod]
+
+    print(d_struct)
     given = d_struct["WL_products"]
 
-    # Cases to Match
-    want = [
-        "Verified Monthly Mean Water Level",
-        "Verified Hourly Height Water Level",
-        "Verified 6-Minute Water Level",
-        "Preliminary 6-Minute Water Level",
-        "Verified High/Low Water Level",
-    ]
-
-    # Compute Logical Matrix (Columns Correspond To Cases In want)
-    logical_matrix = [[case == given_item for case in want] for given_item in given]
-
-    # Match the product flag
-    if prod == want[0]:
-        flag1 = "m"
-        col = 0
-    elif prod == want[1]:
-        flag1 = "1"
-        col = 1
-    elif prod == want[2]:
-        flag1 = "6"
-        col = 2
-    elif prod == want[3]:
-        flag1 = "6p"
-        col = 3
-    elif prod == want[4]:
-        flag1 = "hilo"
-        col = 4
-    else:
-        raise ValueError("Product not recognized.")
-
-    # Get Matching Indexes
-    indx = [i for i, row in enumerate(logical_matrix) if row[col]]
-
-    if not indx:
-        flag2 = 1  # Product is not present in this station
-    else:
-        flag2 = 0
+    # Find all indexes where station supports this exact product
+    indx = [i for i, g in enumerate(given) if g == prod]
+    # Flag2 indicates presence (MATLAB: flag2 = 1 if not found)
+    flag2 = 0 if indx else 1
 
     return flag2, flag1, indx

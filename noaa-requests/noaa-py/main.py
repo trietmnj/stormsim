@@ -13,12 +13,17 @@ if __name__ == "__main__":
             "start_date": ["1900-01-01"],
             "end_date": ["2025-12-29"],
             "greatlakes": 0,
+            "WL_products": [
+                "Verified Monthly Mean Water Level",
+                "Verified Hourly Height Water Level",
+                "Verified 6-Minute Water Level",
+            ],
         }
     ]
 
     id_list = ["123456"]  # station ids
     requested_datum = "MSL"
-    prod = ["water_level"]
+    prod = ["Verified Monthly Mean Water Level"]
     op_mode = 1  # Full record
     d_beg = None  # Not used in full record mode
     d_end = None  # Not used in full record mode
