@@ -21,7 +21,7 @@ STORM_ID_PROB_FILE = "../data/intermediate/stormprob.csv"
 OUTPUT_DIRECTORY = Path("../data/intermediate/conversion-lifecycle-generation/")
 
 RNG = np.random.default_rng()  # consistent RNG
-PROFILE = True  # set to True to enable cProfile profiling
+PROFILE = False  # set to True to enable cProfile profiling
 
 
 # -----------------------------
@@ -201,8 +201,16 @@ def main():
     cdf, storm_ids = _load_storm_id_cdf(STORM_ID_PROB_FILE)
 
     # Columns for split outputs
-    calendar_cols = ["lifecycle", "year_offset", "year", "month", "day", "hour"]
-    ids_cols = calendar_cols + ["storm_id", "rcdf"]
+    cols = [
+        "lifecycle",
+        "year_offset",
+        "year",
+        "month",
+        "day",
+        "hour",
+        "storm_id",
+        "rcdf",
+    ]
 
     # Run lifecycles with a progress bar
     for lc in tqdm(range(NUM_LCS), desc="Simulating lifecycles"):
@@ -219,8 +227,8 @@ def main():
             storm_ids=storm_ids,
             show_progress=False,  # outer tqdm already used
         )
-        df_ids = df[ids_cols]
-        ids_path = OUTPUT_DIRECTORY / f"EventDate_LC_{lc}_with_ids.csv"
+        df_ids = df[cols]
+        ids_path = OUTPUT_DIRECTORY / f"EventDate_LC_{lc}.csv"
         df_ids.to_csv(ids_path, index=False)
 
 
