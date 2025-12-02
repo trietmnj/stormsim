@@ -1,21 +1,6 @@
 import os
 import pandas as pd
 import numpy as np
-import seaborn as sns
-import scipy
-import matplotlib as mpl
-import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
-import sklearn.linear_model
-import statistics
-import statsmodels.api as sm
-import itertools
-import plotly.express as px
-#import pylab
-import distfit
-import fitter
-import random
-from datetime import datetime, timedelta
 
 ### USER INPUTS
 Initialize_date=2033
@@ -48,7 +33,7 @@ Day=df['Day'].to_numpy()
 # stormprob=pd.concat([dfsID, dfprobnorm, dfpcdf], axis=1)
 # sortedstormprob=stormprob.sort_values(by=['cdf'])
 
-### STORM ID AND PROBABILITIES FROM CHS 
+### STORM ID AND PROBABILITIES FROM CHS
 dfstormprob=pd.DataFrame(Input_idprob)
 dfprobsort=dfstormprob.sort_values(by=['DSW'])
 dfprobsort['cdf']=dfprobsort['DSW']/dfprobsort['DSW'].sum()
@@ -94,7 +79,7 @@ stormid_a=id.to_numpy()
                             results.append(None)  # No element in arr2 was greater than val1
                     return results
                 output_indices = find_first_greater_index(samples1, Cumulative_probs_a)
-                #storm_id = 
+                #storm_id =
                 Mo = Month[output_indices]
                 Da = Day[output_indices]
                 Hr = np.random.rand(len(samples1[0]), 1)
@@ -176,7 +161,7 @@ stormid_a=id.to_numpy()
                         if not found:
                             results.append(None)  # No element in arr2 was greater than val1
                     return results
-                output_indices = find_first_greater_index(samples1, cdf_a) 
+                output_indices = find_first_greater_index(samples1, cdf_a)
                 storm_id = stormid_a[output_indices]
                 rcdf=cdf_a[output_indices]
                 Mo = np.random.randint(1, 12, size=(1,))
