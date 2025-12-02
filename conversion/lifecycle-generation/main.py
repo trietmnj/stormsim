@@ -33,7 +33,7 @@ VALIDATE_LAMBDA = True  # set to True to run validation after simulating
 # -----------------------------
 def main():
     OUTPUT_DIRECTORY.mkdir(parents=True, exist_ok=True)
-    relative_probs: pd.DataFrame = lcgen.load.load_relative_probabilities(REL_PROB_FILE)
+    prob_schedule: pd.DataFrame = lcgen.load.load_relative_probabilities(REL_PROB_FILE)
     storm_set: pd.DataFrame = lcgen.load.load_storm_id_cdf(STORM_ID_PROB_FILE)
 
     # Columns for split outputs
@@ -58,7 +58,7 @@ def main():
             duration_years=LIFECYCLE_DURATION,
             lam=LAM_TARGET,
             min_sep_days=MIN_ARRIVAL_TROP_DAYS,
-            relative_probs_df=relative_probs,
+            prob_schedule=prob_schedule,
             storm_set=storm_set,
             show_progress=False,
         )

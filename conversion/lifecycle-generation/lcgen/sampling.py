@@ -1,3 +1,4 @@
+# conversion/lifecycle-generation/lcgen/sampling.py
 import numpy as np
 import pandas as pd
 import datetime as dt
@@ -15,13 +16,13 @@ def simulate_lifecycle(
     duration_years: int,
     lam: float,
     min_sep_days: float,
-    relative_probs_df: pd.DataFrame,
+    prob_schedule: pd.DataFrame,
     storm_set: pd.DataFrame,
     show_progress: bool = False,
     rng: Optional[np.random.Generator] = None,
 ) -> pd.DataFrame:
     """
-    Simulate one lifecycle using day-of-year indexing:
+    Simulate one lifecycle using day-of-year indexing.
 
     Returns a DataFrame with one row per storm event.
     """
@@ -41,15 +42,10 @@ def simulate_lifecycle(
     for year_offset in year_iter:
         year = init_year + year_offset
 
-        # 1) Sample for the number of storms this year
-        n_events = rng.poisson(lam)
-        if n_events == 0:
-            continue
-
-        # 2) Day-of-year + hour with min separation (no thinning)
-        doy, hour, t, month, day = lcgen.sampling.sample_year_events(
+        # Sample all events for this year (count + layout handled internally)
+        doy, hour, t, month, day = _sample_year_events(
             lam=lam,
-            cdf_day=relative_probs_df["Cumulative trop prob"],
+            prob_schedule=prob_schedule,
             min_sep_days=min_sep_days,
             year=year,
             rng=rng,
@@ -62,24 +58,19 @@ def simulate_lifecycle(
         # 3) populate Storm IDs
         u_id = rand(n_kept)
         idx_id = np.searchsorted(storm_set["cdf"], u_id, side="right")
-        sid = storm_set["storm_ID"][idx_id]
-        rcdf = storm_set["cdf"][idx_id]
+        sid = storm_set["storm_id"].to_numpy()[idx_id]
+        rcdf = storm_set["cdf"].to_numpy()[idx_id]
 
-        # 4) Convert day_idx -> month/day for outputs (if desired)
-        base = dt.datetime(year, 1, 1)
         for k in range(n_kept):
-            timestamp = base + dt.timedelta(
-                days=int(day_idx[k]) - 1, hours=float(hour[k])
-            )
             records.append(
                 {
                     "lifecycle": lifecycle_index,
                     "year_offset": year_offset,
                     "year": year,
-                    "day_of_year": int(day_idx[k]),
-                    "month": timestamp.month,
-                    "day": timestamp.day,
-                    "hour": timestamp.hour,
+                    "day_of_year": int(doy[k]),
+                    "month": int(month[k]),
+                    "day": int(day[k]),
+                    "hour": float(hour[k]),
                     "storm_id": int(sid[k]),
                     "rcdf": float(rcdf[k]),
                 }
@@ -88,14 +79,14 @@ def simulate_lifecycle(
     return pd.DataFrame.from_records(records)
 
 
-def sample_poisson_count_with_cap(
+def _sample_poisson_count_with_cap(
     lam: float,
     cdf_day: np.ndarray,
     min_sep_days: float,
     rng: np.random.Generator,
 ) -> int:
     """
-    Sample N ~ Poisson(lam) and (optionally) cap at the maximum
+    Sample N ~ Poisson(lam) and cap at the maximum
     number of events that can fit in the year with min_sep_days.
     """
     n_events = rng.poisson(lam)
@@ -104,27 +95,28 @@ def sample_poisson_count_with_cap(
 
     year_length = len(cdf_day)  # e.g. 365
     max_feasible = int(np.floor(year_length / min_sep_days)) + 1
-
-    if n_events > max_feasible:
-        n_events = max_feasible
+    n_events = min(n_events, max_feasible)
 
     return n_events
 
 
-def sample_day_of_year(
-    cdf_day: np.ndarray,
+def _sample_day_of_year(
+    prob_schedule: pd.DataFrame,
     rng: np.random.Generator,
     n: int,
 ) -> np.ndarray:
-    """Sample n day-of-year values (1..len(cdf_day)) from a daily CDF."""
+    """
+    Sample n day-of-year values (1..len(cdf_day)) from a daily CDF.
+    Returns an array of day-of-year.
+    """
     u = rng.random(n)
-    idx = np.searchsorted(cdf_day, u, side="right")
-    return idx + 1  # 1-based DOY
+    idx = np.searchsorted(prob_schedule["trop_day_cdf"], u, side="right")
+    return prob_schedule.iloc[idx]["day_of_year"].to_numpy().astype(int)
 
 
-def sample_layout_with_min_sep(
+def _sample_layout_with_min_sep(
     n_events: int,
-    cdf_day: np.ndarray,
+    prob_schedule: pd.DataFrame,
     min_sep_days: float,
     rng: np.random.Generator,
     max_attempts: int = 100,
@@ -143,7 +135,7 @@ def sample_layout_with_min_sep(
     last_doy = last_hour = last_t = None
 
     for _ in range(max_attempts):
-        doy = sample_day_of_year(cdf_day, rng, n_events)
+        doy = _sample_day_of_year(prob_schedule, rng, n_events)
         hour = rng.random(n_events) * 24.0
 
         t = doy + hour / 24.0
@@ -172,9 +164,9 @@ def sample_layout_with_min_sep(
     return last_doy, last_hour, last_t
 
 
-def sample_year_events(
+def _sample_year_events(
     lam: float,
-    cdf_day: np.ndarray,
+    prob_schedule: pd.DataFrame,
     min_sep_days: float,
     year: int,
     rng: Optional[np.random.Generator] = None,
@@ -197,8 +189,10 @@ def sample_year_events(
     if rng is None:
         rng = np.random.default_rng()
 
+    cdf_day = prob_schedule["trop_day_cdf"].to_numpy()
+
     # 1) count
-    n_events = sample_poisson_count_with_cap(lam, cdf_day, min_sep_days, rng)
+    n_events = _sample_poisson_count_with_cap(lam, cdf_day, min_sep_days, rng)
     if n_events == 0:
         return (
             np.array([], dtype=int),
@@ -209,9 +203,9 @@ def sample_year_events(
         )
 
     # 2) layout with min separation
-    doy, hour, t = sample_layout_with_min_sep(
+    doy, hour, t = _sample_layout_with_min_sep(
         n_events=n_events,
-        cdf_day=cdf_day,
+        prob_schedule=prob_schedule,
         min_sep_days=min_sep_days,
         rng=rng,
         max_attempts=max_attempts,
@@ -227,5 +221,5 @@ def sample_year_events(
         )
 
     # 3) convert to calendar
-    month, day = doy_to_month_day_vec(year, doy)
+    month, day = lcgen.utils.doy_to_month_day(year, doy)
     return doy, hour, t, month, day
