@@ -7,6 +7,7 @@ import noaapy
 def wl_downloader_v2(
     id_list, station_list, requested_datum, prod, op_mode, d_beg, d_end
 ):
+    """Entry point to the download"""
     if op_mode not in [1, 2]:
         raise ValueError(
             "Please use a valid operational mode (1 - full record, 2 - Specific Date)"
