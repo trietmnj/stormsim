@@ -5,3 +5,4 @@ from .prediction_interval_selector import prediction_interval_selector
 from .wl_measurements_product_selector_v2 import wl_measurements_product_selector_v2
 from .wl_download import wl_download
 from .gap_filler import gap_filler
+from .wl_downloader_v2 import wl_downloader_v2
