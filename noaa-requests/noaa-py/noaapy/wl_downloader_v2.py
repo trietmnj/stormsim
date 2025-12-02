@@ -48,18 +48,18 @@ def wl_downloader_v2(
         print(f"------------------ {i + 1} / {len(id_list)} ---------------------")
         for product in prod:
             # Extract Station from Data Structure
-            d_struct = next(s for s in station_list if s["id"] == station_id)
+            station: dict = next(s for s in station_list if s["id"] == station_id)
             s_data_entry = {
                 "id": station_id,
-                "name": d_struct["name"],
-                "lon": d_struct["lon"],
-                "lat": d_struct["lat"],
-                "state": d_struct["state"],
+                "name": station["name"],
+                "lon": station["lon"],
+                "lat": station["lat"],
+                "state": station["state"],
             }
 
             # Check WL Measurements Products Available
             flag4, flag1, indx = noaapy.wl_measurements_product_selector_v2(
-                d_struct, product
+                station, product
             )
 
             if flag4 == 1:
@@ -81,13 +81,13 @@ def wl_downloader_v2(
             # Check if Date Range of Interest is Available
             if op_mode == 2:
                 indx, d_end, d_beg, dummy3 = noaapy.date_search(
-                    d_struct, d_beg, d_end, indx
+                    station, d_beg, d_end, indx
                 )
                 if not dummy3:
-                    d_struct["start_date"][indx] = (
+                    station["start_date"][indx] = (
                         f"{d_beg.strftime('%Y-%m-%d %H:%M:%S')} GMT"
                     )
-                    d_struct["end_date"][indx] = (
+                    station["end_date"][indx] = (
                         f"{d_end.strftime('%Y-%m-%d %H:%M:%S')} GMT"
                     )
                 else:
@@ -108,15 +108,15 @@ def wl_downloader_v2(
 
             # Divide Date Range in Allowed Segments
             st_dates, end_dates, st_dates_p, end_dates_p = noaapy.download_segmentation(
-                d_struct, flag1, indx
+                station, flag1, indx
             )
 
             # Check Datum Availability
-            datum, datum_p = noaapy.datum_selector(d_struct, requested_datum)
+            datum, datum_p = noaapy.datum_selector(station, requested_datum)
 
             # Check Tidal Predictions Intervals
             interval, _ = noaapy.prediction_interval_selector(
-                d_struct, flag1, d_struct["greatlakes"]
+                station, flag1, station["greatlakes"]
             )
 
             # Assign Info to Sdata
@@ -126,7 +126,7 @@ def wl_downloader_v2(
                     "TP_datum": datum_p,
                     "WL_downloaded_product": product_label(flag1),
                     "TP_downloaded_product": interval,
-                    "record_length": d_struct["record_length"][indx],
+                    "record_length": station["record_length"][indx],
                 }
             )
 
@@ -166,14 +166,14 @@ def wl_downloader_v2(
                 end_dates_p,
                 gen_url,
                 timeout,
-                d_struct["greatlakes"],
+                station["greatlakes"],
                 flag1,
-                d_struct,
+                station,
             )
 
             # Make Sure Time Vectors Are the Same Length
-            if d_struct["greatlakes"] == 0:
-                s_data = vector_length_check(ctr, s_data, flag1, d_struct["greatlakes"])
+            if station["greatlakes"] == 0:
+                s_data = vector_length_check(ctr, s_data, flag1, station["greatlakes"])
 
             # Compute Total Record Length (Non NaN Data)
             s_data = record_length_calc(ctr, s_data, flag1)

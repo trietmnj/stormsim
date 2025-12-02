@@ -4,12 +4,14 @@ import datetime
 import noaapy
 
 
-def download_segmentation(d_struct, flag1, indx):
+def download_segmentation(station, flag1, indx):
     if flag1 != "m":
-        st_dates, end_dates = noaapy.date.date_range_segmentation(d_struct, flag1, indx)
+        st_dates, end_dates = noaapy.date.date_range_segmentation(station, flag1, indx)
     else:
-        st_dates = d_struct["start_date"][indx]
-        end_dates = d_struct["end_date"][indx]
+        print(station)
+        print(indx)
+        st_dates = station["start_date"][indx]
+        end_dates = station["end_date"][indx]
         st_dates = [date[:19] for date in st_dates]
         end_dates = [date[:19] for date in end_dates]
         st_dates = [
@@ -26,7 +28,7 @@ def download_segmentation(d_struct, flag1, indx):
         ]
 
     st_dates_p, end_dates_p = noaapy.date.date_range_segmentation_predictions_v2(
-        d_struct, indx
+        station, indx
     )
 
     return st_dates, end_dates, st_dates_p, end_dates_p

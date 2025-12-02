@@ -17,7 +17,6 @@ output_directory = r"C:\Users\RDCRLHPS\Documents\Chart-Python"
 
 ### READ PROBABILITY FILE INFO [Month, Day, Daily Probability, Cumulative Probability]
 df = pd.DataFrame(InputFile)  # Dataframe format of the input file
-# df_array=df.to_numpy() #Array format of the input file
 Cumulative_probs = df["Cumulative trop prob"]
 Cumulative_probs_a = Cumulative_probs.to_numpy()
 Month = df["Month"].to_numpy()
