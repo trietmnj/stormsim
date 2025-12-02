@@ -10,7 +10,8 @@ from tqdm.auto import tqdm  # <-- progress bar
 INITIALIZE_YEAR = 2033
 LIFECYCLE_DURATION = 50  # number of years in a lifecycle
 NUM_LCS = 100  # number of lifecycles
-LAM = 1.7  # local storm recurrence rate (Poisson lambda)
+LAM_TARGET = 1.7  # local storm recurrence rate (Poisson lambda)
+YEAR_LENGTH_DAYS = 365.0
 
 # minimum separation between storms in days
 MIN_ARRIVAL_TROP_DAYS = 7.0
@@ -22,6 +23,7 @@ OUTPUT_DIRECTORY = Path("../data/intermediate/conversion-lifecycle-generation/")
 
 RNG = np.random.default_rng()  # consistent RNG
 PROFILE = False  # set to True to enable cProfile profiling
+VALIDATE_LAMBDA = True  # set to True to run validation after simulating
 
 
 # -----------------------------
@@ -88,6 +90,139 @@ def _thin_by_min_separation(times: np.ndarray, min_sep_days: float) -> np.ndarra
     return np.asarray(keep, dtype=int)
 
 
+def _estimate_lambda_eff(
+    lam_raw: float,
+    cum_probs: np.ndarray,
+    months: np.ndarray,
+    days: np.ndarray,
+    min_sep_days: float,
+    cdf: np.ndarray,
+    storm_ids: np.ndarray,
+    init_year: int,
+    duration_years_cal: int = 30,
+    num_lcs_cal: int = 30,
+) -> float:
+    """
+    Estimate the effective lambda (mean storms/year) produced by simulate_lifecycle
+    when using lam_raw. Uses a smaller calibration run for speed.
+    """
+    dfs = []
+    for lc in range(num_lcs_cal):
+        df = simulate_lifecycle(
+            lifecycle_index=lc,
+            init_year=init_year,
+            duration_years=duration_years_cal,
+            lam=lam_raw,
+            cum_probs=cum_probs,
+            months=months,
+            days=days,
+            min_sep_days=min_sep_days,
+            cdf=cdf,
+            storm_ids=storm_ids,
+            show_progress=False,
+        )
+        dfs.append(df)
+
+    if not dfs:
+        return 0.0
+
+    df_all = pd.concat(dfs, ignore_index=True)
+    counts = compute_storm_counts(df_all)  # helper from earlier
+    return float(counts["n_storms"].mean())
+
+
+def calibrate_lam_raw_with_simulator(
+    lambda_target: float,
+    cum_probs: np.ndarray,
+    months: np.ndarray,
+    days: np.ndarray,
+    min_sep_days: float,
+    cdf: np.ndarray,
+    storm_ids: np.ndarray,
+    init_year: int,
+) -> float:
+    """
+    Binary search lam_raw so that the simulate_lifecycle output
+    has mean storms/year ≈ lambda_target.
+    """
+    lam_low = max(1e-6, lambda_target * 0.5)
+    lam_high = lambda_target * 3.0
+
+    # ensure upper bound is high enough
+    for _ in range(5):
+        mean_high = _estimate_lambda_eff(
+            lam_high,
+            cum_probs,
+            months,
+            days,
+            min_sep_days,
+            cdf,
+            storm_ids,
+            init_year,
+        )
+        if mean_high >= lambda_target:
+            break
+        lam_high *= 2.0
+
+    for _ in range(12):  # 2^12 ≈ 4096, enough precision
+        mid = 0.5 * (lam_low + lam_high)
+        mean_mid = _estimate_lambda_eff(
+            mid,
+            cum_probs,
+            months,
+            days,
+            min_sep_days,
+            cdf,
+            storm_ids,
+            init_year,
+        )
+
+        if mean_mid < lambda_target:
+            lam_low = mid
+        else:
+            lam_high = mid
+
+    lam_raw = 0.5 * (lam_low + lam_high)
+    print(f"[calibration] lam_raw={lam_raw:.4f} gives mean ≈ {lambda_target}")
+    return lam_raw
+
+
+# -----------------------------
+# VALIDATION
+# -----------------------------
+def compute_storm_counts(df_all: pd.DataFrame) -> pd.DataFrame:
+    """
+    Given a full concatenated lifecycle dataframe,
+    return a table of storm counts per (lifecycle, year).
+    """
+    counts = (
+        df_all.groupby(["lifecycle", "year"]).size().rename("n_storms").reset_index()
+    )
+    return counts
+
+
+def verify_lambda(counts: pd.DataFrame, lambda_target: float) -> None:
+    """
+    Print summary stats showing how well the output storm count distribution
+    matches the target lambda.
+    """
+    mean_emp = counts["n_storms"].mean()
+    var_emp = counts["n_storms"].var(ddof=0)
+
+    print("\n--- Storm Count Verification ---")
+    print(f"Target lambda:       {lambda_target:.4f}")
+    print(f"Empirical mean:      {mean_emp:.4f}")
+    print(f"Empirical variance:  {var_emp:.4f}")
+
+    # show empirical distribution of N
+    value_counts = counts["n_storms"].value_counts().sort_index()
+    emp_prob = value_counts / value_counts.sum()
+
+    print("\nk | empirical P(N=k)")
+    for k, p in emp_prob.items():
+        print(f"{k:2d} | {p:.4f}")
+
+
 # -----------------------------
 # SIMULATION ROUTINES
 # -----------------------------
@@ -105,31 +240,29 @@ def simulate_lifecycle(
     show_progress: bool = False,
 ) -> pd.DataFrame:
     """
-    Simulate one lifecycle of storms, using:
+    Simulate one lifecycle:
 
-      - `cum_probs`, `months`, `days` for timing (calendar-based)
-      - `cdf`, `storm_ids` for assigning storm IDs / probabilities
+    - For each year:
+      1) Draw N ~ Poisson(lam) candidate storms.
+      2) Sample calendar-based timing (month/day/hour) using cum_probs/months/days.
+      3) Build within-year times t (in days), sort, and thin by min_sep_days.
+      4) For the kept events, sample storm IDs from the CHS storm-ID CDF.
 
-    The key point: event *timing* is simulated once per year and then both
-    calendar fields and storm IDs are attached to the same events.
+    Returns a DataFrame with one row per kept storm event.
     """
-
     records: list[dict] = []
 
-    year_iter = (
-        tqdm(
-            range(duration_years),
-            desc=f"LC {lifecycle_index} (combined)",
-            leave=False,
-        )
-        if show_progress
-        else range(duration_years)
-    )
+    year_iter = range(duration_years)
+    if show_progress:
+        from tqdm.auto import tqdm
 
-    # Local RNG shortcuts (micro-optimization)
-    rand = RNG.random
+        year_iter = tqdm(year_iter, desc=f"LC {lifecycle_index}")
+
+    rand = RNG.random  # local alias for speed
 
     for year_offset in year_iter:
+        year = init_year + year_offset
+
         # 1) Number of storms this year
         n_events = RNG.poisson(lam)
         if n_events == 0:
@@ -147,6 +280,7 @@ def simulate_lifecycle(
         # 3) Build within-year time, sort, and thin by min separation
         t = da + hour / 24.0
         order = np.argsort(t)
+
         t = t[order]
         mo = mo[order]
         da = da[order]
@@ -154,13 +288,13 @@ def simulate_lifecycle(
 
         keep_idx = _thin_by_min_separation(t, min_sep_days)
         if keep_idx.size == 0:
-            # All events too close together in this realization
+            # All events were too close together in this realization
             continue
 
+        t = t[keep_idx]
         mo = mo[keep_idx]
         da = da[keep_idx]
         hour = hour[keep_idx]
-        t = t[keep_idx]
         n_kept = keep_idx.size
 
         # 4) For those *same* events, sample storm IDs via storm CDF
@@ -170,8 +304,7 @@ def simulate_lifecycle(
         sid = storm_ids[idx_id]
         rcdf = cdf[idx_id]
 
-        # 5) Record rows (calendar fields + storm IDs share the same timing)
-        year = init_year + year_offset
+        # Collect rows
         for k in range(n_kept):
             records.append(
                 {
@@ -183,7 +316,6 @@ def simulate_lifecycle(
                     "hour": float(hour[k]),
                     "storm_id": int(sid[k]),
                     "rcdf": float(rcdf[k]),
-                    "t_within_year": float(t[k]),  # optional, handy for QA
                 }
             )
 
@@ -212,24 +344,49 @@ def main():
         "rcdf",
     ]
 
-    # Run lifecycles with a progress bar
-    for lc in tqdm(range(NUM_LCS), desc="Simulating lifecycles"):
+    # 1) Calibrate lam_raw automatically
+    lam_raw = calibrate_lam_raw_with_simulator(
+        lambda_target=LAM_TARGET,
+        cum_probs=cum_probs,
+        months=months,
+        days=days,
+        min_sep_days=MIN_ARRIVAL_TROP_DAYS,
+        cdf=cdf,
+        storm_ids=storm_ids,
+        init_year=INITIALIZE_YEAR,
+    )
+
+    # 2) Full simulation using calibrated lam_raw
+    all_dfs = []
+    for lc in range(NUM_LCS):
         df = simulate_lifecycle(
             lifecycle_index=lc,
             init_year=INITIALIZE_YEAR,
             duration_years=LIFECYCLE_DURATION,
-            lam=LAM,
+            lam=lam_raw,
             cum_probs=cum_probs,
             months=months,
             days=days,
             min_sep_days=MIN_ARRIVAL_TROP_DAYS,
             cdf=cdf,
             storm_ids=storm_ids,
-            show_progress=False,  # outer tqdm already used
+            show_progress=False,
         )
         df_ids = df[cols]
         ids_path = OUTPUT_DIRECTORY / f"EventDate_LC_{lc}.csv"
         df_ids.to_csv(ids_path, index=False)
+
+    if VALIDATE_LAMBDA:
+        # Concatenate all lifecycles for validation
+        all_dfs = []
+        for lc in range(NUM_LCS):
+            ids_path = OUTPUT_DIRECTORY / f"EventDate_LC_{lc}.csv"
+            df_lc = pd.read_csv(ids_path)
+            all_dfs.append(df_lc)
+        df_all = pd.concat(all_dfs, ignore_index=True)
+
+        counts = compute_storm_counts(df_all)
+        verify_lambda(counts, LAM_TARGET)
 
 
 if __name__ == "__main__":
