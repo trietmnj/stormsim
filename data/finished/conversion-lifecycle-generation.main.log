@@ -1,0 +1,56 @@
+╰─λ time uv run lifecycle-generation/main.py                                           (base) 0 (0.622s)
+Simulating lifecycles: 100%|█████████████████████████████████████████| 100/100 [00:00<00:00, 460.38it/s]
+         372835 function calls (369267 primitive calls) in 0.225 seconds
+
+   Ordered by: cumulative time
+   List reduced from 889 to 40 due to restriction <40>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+      2/1    0.000    0.000    0.218    0.218 /home/tmnj/miniconda3/lib/python3.13/threading.py:641(wait)
+      2/1    0.000    0.000    0.218    0.218 /home/tmnj/miniconda3/lib/python3.13/threading.py:327(wait)
+      2/1    0.002    0.001    0.218    0.218 /home/tmnj/dev/work/stormsim/conversion/lifecycle-generation/main.py:197(main)
+      100    0.031    0.000    0.126    0.001 /home/tmnj/dev/work/stormsim/conversion/lifecycle-generation/main.py:94(simulate_lifecycle)
+      100    0.000    0.000    0.056    0.001 /home/tmnj/miniconda3/lib/python3.13/site-packages/pandas/util/_decorators.py:325(wrapper)
+      100    0.001    0.000    0.056    0.001 /home/tmnj/miniconda3/lib/python3.13/site-packages/pandas/core/generic.py:3819(to_csv)
+      100    0.000    0.000    0.052    0.001 /home/tmnj/miniconda3/lib/python3.13/site-packages/pandas/io/formats/format.py:965(to_csv)
+      100    0.000    0.000    0.049    0.000 /home/tmnj/miniconda3/lib/python3.13/site-packages/pandas/io/formats/csvs.py:246(save)
+      100    0.001    0.000    0.043    0.000 /home/tmnj/miniconda3/lib/python3.13/site-packages/pandas/core/frame.py:2327(from_records)
+     8238    0.013    0.000    0.040    0.000 /home/tmnj/dev/work/stormsim/conversion/lifecycle-generation/main.py:58(_inverse_cdf_sample)
+      106    0.001    0.000    0.033    0.000 /home/tmnj/miniconda3/lib/python3.13/site-packages/pandas/core/frame.py:4073(__getitem__)
+      100    0.000    0.000    0.028    0.000 /home/tmnj/miniconda3/lib/python3.13/site-packages/pandas/io/formats/csvs.py:272(_save)
+      100    0.001    0.000    0.027    0.000 /home/tmnj/miniconda3/lib/python3.13/site-packages/pandas/io/formats/csvs.py:305(_save_body)
+      100    0.006    0.000    0.025    0.000 /home/tmnj/miniconda3/lib/python3.13/site-packages/pandas/io/formats/csvs.py:315(_save_chunk)
+      102    0.000    0.000    0.024    0.000 /home/tmnj/miniconda3/lib/python3.13/site-packages/pandas/core/internals/construction.py:96(arrays_to_mgr)
+      100    0.001    0.000    0.021    0.000 /home/tmnj/miniconda3/lib/python3.13/site-packages/pandas/core/indexes/base.py:6198(_get_indexer_strict)
+      100    0.000    0.000    0.018    0.000 /home/tmnj/miniconda3/lib/python3.13/site-packages/pandas/core/internals/construction.py:793(to_arrays)
+      102    0.001    0.000    0.016    0.000 /home/tmnj/miniconda3/lib/python3.13/site-packages/pandas/io/common.py:664(get_handle)
+     8238    0.003    0.000    0.016    0.000 /home/tmnj/miniconda3/lib/python3.13/site-packages/numpy/_core/fromnumeric.py:2477(any)
+      102    0.000    0.000    0.014    0.000 /home/tmnj/miniconda3/lib/python3.13/site-packages/pandas/core/internals/managers.py:2140(create_block_manager_from_column_arrays)
+      721    0.001    0.000    0.014    0.000 /home/tmnj/miniconda3/lib/python3.13/site-packages/pandas/core/indexes/base.py:7659(ensure_index)
+      400    0.002    0.000    0.013    0.000 /home/tmnj/miniconda3/lib/python3.13/site-packages/pandas/core/indexes/base.py:7836(get_values_for_csv)
+     8238    0.005    0.000    0.012    0.000 /home/tmnj/miniconda3/lib/python3.13/site-packages/numpy/_core/fromnumeric.py:89(_wrapreduction_any_all)
+      100    0.000    0.000    0.012    0.000 /home/tmnj/miniconda3/lib/python3.13/site-packages/pandas/core/frame.py:1404(_get_values_for_csv)
+      306    0.002    0.000    0.012    0.000 /home/tmnj/miniconda3/lib/python3.13/site-packages/pandas/core/indexes/base.py:475(__new__)
+      100    0.000    0.000    0.012    0.000 /home/tmnj/miniconda3/lib/python3.13/site-packages/pandas/core/internals/managers.py:478(get_values_for_csv)
+      103    0.000    0.000    0.012    0.000 /home/tmnj/miniconda3/lib/python3.13/site-packages/pandas/core/internals/managers.py:317(apply)
+    12559    0.004    0.000    0.012    0.000 /home/tmnj/miniconda3/lib/python3.13/site-packages/numpy/_core/fromnumeric.py:51(_wrapfunc)
+     1224    0.003    0.000    0.011    0.000 /home/tmnj/miniconda3/lib/python3.13/site-packages/pandas/core/construction.py:517(sanitize_array)
+      100    0.000    0.000    0.011    0.000 /home/tmnj/miniconda3/lib/python3.13/site-packages/pandas/core/generic.py:4164(_take_with_is_copy)
+      200    0.000    0.000    0.011    0.000 /home/tmnj/miniconda3/lib/python3.13/site-packages/pandas/core/internals/blocks.py:801(get_values_for_csv)
+46707/46605    0.006    0.000    0.011    0.000 {built-in method builtins.isinstance}
+      200    0.001    0.000    0.011    0.000 /home/tmnj/miniconda3/lib/python3.13/site-packages/pandas/core/indexes/base.py:3827(get_indexer)
+      100    0.000    0.000    0.011    0.000 /home/tmnj/miniconda3/lib/python3.13/site-packages/pandas/core/generic.py:4049(take)
+      100    0.003    0.000    0.011    0.000 /home/tmnj/miniconda3/lib/python3.13/site-packages/pandas/core/internals/construction.py:891(_list_of_dict_to_arrays)
+     8238    0.002    0.000    0.010    0.000 /home/tmnj/miniconda3/lib/python3.13/site-packages/numpy/_core/fromnumeric.py:1446(searchsorted)
+      101    0.000    0.000    0.009    0.000 /home/tmnj/miniconda3/lib/python3.13/site-packages/pandas/core/internals/managers.py:888(take)
+      103    0.001    0.000    0.009    0.000 /home/tmnj/miniconda3/lib/python3.13/site-packages/pandas/core/internals/managers.py:1801(_consolidate_inplace)
+      100    0.000    0.000    0.008    0.000 /home/tmnj/miniconda3/lib/python3.13/site-packages/pandas/core/indexes/base.py:6174(get_indexer_for)
+      501    0.007    0.000    0.007    0.000 {method 'astype' of 'numpy.ndarray' objects}
+
+
+
+
+________________________________________________________
+Executed in  473.21 millis    fish           external
+   usr time    2.95 secs    321.00 micros    2.95 secs
+   sys time    0.08 secs    327.00 micros    0.08 secs

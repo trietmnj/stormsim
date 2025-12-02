@@ -6,3 +6,5 @@ data/*
 !data/raw/
 !data/raw/conversion-lifecycle-generation/
 !data/raw/conversion-lifecycle-generation/**
+!data/finished/
+!data/finished/conversion-lifecycle-generation.main.log

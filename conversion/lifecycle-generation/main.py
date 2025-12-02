@@ -21,7 +21,7 @@ STORM_ID_PROB_FILE = "../data/intermediate/stormprob.csv"
 OUTPUT_DIRECTORY = Path("../data/intermediate/conversion-lifecycle-generation/")
 
 RNG = np.random.default_rng()  # consistent RNG
-PROFILE = False  # set to True to enable cProfile profiling
+PROFILE = True  # set to True to enable cProfile profiling
 
 
 # -----------------------------
@@ -91,7 +91,7 @@ def _thin_by_min_separation(times: np.ndarray, min_sep_days: float) -> np.ndarra
 # -----------------------------
 # SIMULATION ROUTINES
 # -----------------------------
-def _simulate_lifecycle_with_calendar(
+def simulate_lifecycle(
     lifecycle_index: int,
     init_year: int,
     duration_years: int,
@@ -100,124 +100,80 @@ def _simulate_lifecycle_with_calendar(
     months: np.ndarray,
     days: np.ndarray,
     min_sep_days: float,
-    show_progress: bool = False,
-) -> pd.DataFrame:
-    records: list[dict] = []
-
-    year_iter = (
-        tqdm(
-            range(duration_years),
-            desc=f"LC {lifecycle_index} (calendar)",
-            leave=False,
-        )
-        if show_progress
-        else range(duration_years)
-    )
-
-    for year_offset in year_iter:
-        n_events = RNG.poisson(lam)
-        if n_events == 0:
-            continue
-
-        # 1) sample events once
-        u = RNG.random(n_events)  # no need to sort u
-        idx = _inverse_cdf_sample(u, cum_probs)
-
-        mo = months[idx]
-        da = days[idx]
-        hour = RNG.random(n_events) * 24.0
-
-        # 2) build within-year time and sort
-        t = da + hour / 24.0
-        order = np.argsort(t)
-        t = t[order]
-        mo = mo[order]
-        da = da[order]
-        hour = hour[order]
-
-        # 3) thin by min separation
-        keep_idx = _thin_by_min_separation(t, min_sep_days)
-        if keep_idx.size == 0:
-            # all storms too close together given this year's realization
-            continue
-
-        year = init_year + year_offset
-        for k in keep_idx:
-            records.append(
-                {
-                    "lifecycle": lifecycle_index,
-                    "year_offset": year_offset,
-                    "year": year,
-                    "month": int(mo[k]),
-                    "day": int(da[k]),
-                    "hour": float(hour[k]),
-                }
-            )
-
-    return pd.DataFrame.from_records(records)
-
-
-def _simulate_lifecycle_with_storm_ids(
-    lifecycle_index: int,
-    init_year: int,
-    duration_years: int,
-    lam: float,
     cdf: np.ndarray,
     storm_ids: np.ndarray,
-    min_sep_days: float,
     show_progress: bool = False,
 ) -> pd.DataFrame:
     """
-    Simulate one lifecycle of storms using the CHS storm ID probability file.
-    Here we sample storm IDs and assign random (month, day) within a year.
+    Simulate one lifecycle of storms, using:
+
+      - `cum_probs`, `months`, `days` for timing (calendar-based)
+      - `cdf`, `storm_ids` for assigning storm IDs / probabilities
+
+    The key point: event *timing* is simulated once per year and then both
+    calendar fields and storm IDs are attached to the same events.
     """
+
     records: list[dict] = []
 
     year_iter = (
         tqdm(
             range(duration_years),
-            desc=f"LC {lifecycle_index} (Storm ID)",
+            desc=f"LC {lifecycle_index} (combined)",
             leave=False,
         )
         if show_progress
         else range(duration_years)
     )
 
+    # Local RNG shortcuts (micro-optimization)
+    rand = RNG.random
+    randint = RNG.integers
+
     for year_offset in year_iter:
+        # 1) Number of storms this year
         n_events = RNG.poisson(lam)
         if n_events == 0:
             continue
 
-        # 1) sample storm IDs once
-        u = RNG.random(n_events)
-        idx = _inverse_cdf_sample(u, cdf)
+        # 2) Sample calendar-based timing (month/day/hour) once
+        #    Use cum_probs/months/days for seasonality
+        u_time = rand(n_events)
+        idx_time = _inverse_cdf_sample(u_time, cum_probs)
 
-        sid = storm_ids[idx]
-        rcdf = cdf[idx]
+        mo = months[idx_time]
+        da = days[idx_time]
+        hour = rand(n_events) * 24.0
 
-        # random month/day (placeholder until you wire in real seasonal calendar)
-        mo = RNG.integers(1, 13, size=n_events)  # 1–12
-        da = RNG.integers(1, 32, size=n_events)  # 1–31
-
-        hour = RNG.random(n_events) * 24.0
-
-        # 2) build within-year time and sort
+        # 3) Build within-year time, sort, and thin by min separation
         t = da + hour / 24.0
         order = np.argsort(t)
         t = t[order]
         mo = mo[order]
         da = da[order]
         hour = hour[order]
-        sid = sid[order]
-        rcdf = rcdf[order]
 
-        # 3) thin by min separation
         keep_idx = _thin_by_min_separation(t, min_sep_days)
         if keep_idx.size == 0:
+            # All events too close together in this realization
             continue
 
+        mo = mo[keep_idx]
+        da = da[keep_idx]
+        hour = hour[keep_idx]
+        t = t[keep_idx]
+        n_kept = keep_idx.size
+
+        # 4) For those *same* events, sample storm IDs via storm CDF
+        u_id = rand(n_kept)
+        idx_id = _inverse_cdf_sample(u_id, cdf)
+
+        sid = storm_ids[idx_id]
+        rcdf = cdf[idx_id]
+
+        # 5) Record rows (calendar fields + storm IDs share the same timing)
         year = init_year + year_offset
-        for k in keep_idx:
+        for k in range(n_kept):
             records.append(
                 {
                     "lifecycle": lifecycle_index,
@@ -228,6 +184,7 @@ def _simulate_lifecycle_with_storm_ids(
                     "hour": float(hour[k]),
                     "storm_id": int(sid[k]),
                     "rcdf": float(rcdf[k]),
+                    "t_within_year": float(t[k]),  # optional, handy for QA
                 }
             )
 
@@ -244,10 +201,13 @@ def main():
     cum_probs, months, days = _load_relative_probabilities(REL_PROB_FILE)
     cdf, storm_ids = _load_storm_id_cdf(STORM_ID_PROB_FILE)
 
+    # Columns for split outputs
+    calendar_cols = ["lifecycle", "year_offset", "year", "month", "day", "hour"]
+    ids_cols = calendar_cols + ["storm_id", "rcdf"]
+
     # Run lifecycles with a progress bar
     for lc in tqdm(range(NUM_LCS), desc="Simulating lifecycles"):
-        # --- Calendar-based simulation (uses Month/Day/CDF from file)
-        df_calendar = _simulate_lifecycle_with_calendar(
+        df = simulate_lifecycle(
             lifecycle_index=lc,
             init_year=INITIALIZE_YEAR,
             duration_years=LIFECYCLE_DURATION,
@@ -256,22 +216,11 @@ def main():
             months=months,
             days=days,
             min_sep_days=MIN_ARRIVAL_TROP_DAYS,
-        )
-
-        calendar_path = OUTPUT_DIRECTORY / f"EventDate_LC_{lc}_calendar.csv"
-        df_calendar.to_csv(calendar_path, index=False)
-
-        # --- Storm-ID-based simulation
-        df_ids = _simulate_lifecycle_with_storm_ids(
-            lifecycle_index=lc,
-            init_year=INITIALIZE_YEAR,
-            duration_years=LIFECYCLE_DURATION,
-            lam=LAM,
             cdf=cdf,
             storm_ids=storm_ids,
-            min_sep_days=MIN_ARRIVAL_TROP_DAYS,
+            show_progress=False,  # outer tqdm already used
         )
-
+        df_ids = df[ids_cols]
         ids_path = OUTPUT_DIRECTORY / f"EventDate_LC_{lc}_with_ids.csv"
         df_ids.to_csv(ids_path, index=False)
 
