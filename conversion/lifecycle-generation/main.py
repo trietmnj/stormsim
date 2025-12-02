@@ -1,6 +1,7 @@
 from pathlib import Path
 import numpy as np
 import pandas as pd
+from tqdm.auto import tqdm  # <-- progress bar
 
 
 # -----------------------------
@@ -16,10 +17,10 @@ MIN_ARRIVAL_TROP_DAYS = 7.0
 MIN_ARRIVAL_EXTRA_DAYS = 4.0  # not used yet, but kept for future
 
 REL_PROB_FILE = (
-    r"C:\Users\RDCRLHPS\Documents\STORMSIM CHART\Relative_probability_bins_Atlantic.csv"
+    "../data/raw/conversion-lifecycle-generation/Relative_probability_bins_Atlantic 4.csv"
 )
-STORM_ID_PROB_FILE = r"C:\Users\RDCRLHPS\Documents\Chart-Python\stormprob.csv"
-OUTPUT_DIRECTORY = Path(r"C:\Users\RDCRLHPS\Documents\Chart-Python")
+STORM_ID_PROB_FILE = "../data/intermediate/stormprob.csv"
+OUTPUT_DIRECTORY = Path("../data/intermediate/")
 
 RNG = np.random.default_rng()  # consistent RNG
 
@@ -198,8 +199,8 @@ def main():
     cum_probs, months, days = _load_relative_probabilities(REL_PROB_FILE)
     cdf, storm_ids = _load_storm_id_cdf(STORM_ID_PROB_FILE)
 
-    # Run lifecycles
-    for lc in range(NUM_LCS):
+    # Run lifecycles with a progress bar
+    for lc in tqdm(range(NUM_LCS), desc="Simulating lifecycles"):
         # --- Calendar-based simulation (uses Month/Day/CDF from file)
         df_calendar = _simulate_lifecycle_with_calendar(
             lifecycle_index=lc,
@@ -229,9 +230,9 @@ def main():
         ids_path = OUTPUT_DIRECTORY / f"EventDate_LC_{lc}_with_ids.csv"
         df_ids.to_csv(ids_path, index=False)
 
-        print(
-            f"Processed lifecycle {lc} "
-            f"(calendar events: {len(df_calendar)}, id events: {len(df_ids)})"
+        # Optional: lightweight per-iteration log in the tqdm bar
+        tqdm.write(
+            f"LC {lc}: calendar events={len(df_calendar)}, id events={len(df_ids)}"
         )
 
 
