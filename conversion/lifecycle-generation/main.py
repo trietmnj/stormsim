@@ -21,6 +21,7 @@ STORM_ID_PROB_FILE = "../data/intermediate/stormprob.csv"
 OUTPUT_DIRECTORY = Path("../data/intermediate/")
 
 RNG = np.random.default_rng()  # consistent RNG
+PROFILE = True  # set to True to enable cProfile profiling
 
 
 # -----------------------------
@@ -220,40 +221,41 @@ def main():
         calendar_path = OUTPUT_DIRECTORY / f"EventDate_LC_{lc}_calendar.csv"
         df_calendar.to_csv(calendar_path, index=False)
 
-        # # --- Storm-ID-based simulation
-        # df_ids = _simulate_lifecycle_with_storm_ids(
-        #     lifecycle_index=lc,
-        #     init_year=INITIALIZE_YEAR,
-        #     duration_years=LIFECYCLE_DURATION,
-        #     lam=LAM,
-        #     cdf=cdf,
-        #     storm_ids=storm_ids,
-        #     min_sep_days=MIN_ARRIVAL_TROP_DAYS,
-        # )
-        #
-        # ids_path = OUTPUT_DIRECTORY / f"EventDate_LC_{lc}_with_ids.csv"
-        # df_ids.to_csv(ids_path, index=False)
-        #
+        # --- Storm-ID-based simulation
+        df_ids = _simulate_lifecycle_with_storm_ids(
+            lifecycle_index=lc,
+            init_year=INITIALIZE_YEAR,
+            duration_years=LIFECYCLE_DURATION,
+            lam=LAM,
+            cdf=cdf,
+            storm_ids=storm_ids,
+            min_sep_days=MIN_ARRIVAL_TROP_DAYS,
+        )
+
+        ids_path = OUTPUT_DIRECTORY / f"EventDate_LC_{lc}_with_ids.csv"
+        df_ids.to_csv(ids_path, index=False)
+
         # Optional: lightweight per-iteration log in the tqdm bar
-        # tqdm.write(
-        #     f"LC {lc}: calendar events={len(df_calendar)}, id events={len(df_ids)}"
-        # )
+        tqdm.write(
+            f"LC {lc}: calendar events={len(df_calendar)}, id events={len(df_ids)}"
+        )
 
 
 if __name__ == "__main__":
-    # main()
+    if PROFILE:
+        import cProfile
+        import pstats
+        import io
 
-    import cProfile
-    import pstats
-    import io
+        pr = cProfile.Profile()
+        pr.enable()
 
-    pr = cProfile.Profile()
-    pr.enable()
+        main()
 
-    main()
-
-    pr.disable()
-    s = io.StringIO()
-    ps = pstats.Stats(pr, stream=s).sort_stats("cumtime")  # or "tottime"
-    ps.print_stats(40)  # top 40 entries
-    print(s.getvalue())
+        pr.disable()
+        s = io.StringIO()
+        ps = pstats.Stats(pr, stream=s).sort_stats("cumtime")  # or "tottime"
+        ps.print_stats(40)  # top 40 entries
+        print(s.getvalue())
+    else:
+        main()
