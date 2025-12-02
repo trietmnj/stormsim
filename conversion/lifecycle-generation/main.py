@@ -128,7 +128,6 @@ def simulate_lifecycle(
 
     # Local RNG shortcuts (micro-optimization)
     rand = RNG.random
-    randint = RNG.integers
 
     for year_offset in year_iter:
         # 1) Number of storms this year
