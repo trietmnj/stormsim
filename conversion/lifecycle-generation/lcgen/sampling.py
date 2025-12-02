@@ -1,5 +1,91 @@
 import numpy as np
+import pandas as pd
+import datetime as dt
 from typing import Tuple, Optional
+
+import lcgen
+
+
+# -----------------------------
+# SIMULATION ROUTINES
+# -----------------------------
+def simulate_lifecycle(
+    lifecycle_index: int,
+    init_year: int,
+    duration_years: int,
+    lam: float,
+    min_sep_days: float,
+    relative_probs_df: pd.DataFrame,
+    storm_set: pd.DataFrame,
+    show_progress: bool = False,
+    rng: Optional[np.random.Generator] = None,
+) -> pd.DataFrame:
+    """
+    Simulate one lifecycle using day-of-year indexing:
+
+    Returns a DataFrame with one row per storm event.
+    """
+    if rng is None:
+        rng = np.random.default_rng()
+
+    records: list[dict] = []
+
+    year_iter = range(duration_years)
+    if show_progress:
+        from tqdm.auto import tqdm
+
+        year_iter = tqdm(year_iter, desc=f"LC {lifecycle_index}")
+
+    rand = rng.random
+
+    for year_offset in year_iter:
+        year = init_year + year_offset
+
+        # 1) Sample for the number of storms this year
+        n_events = rng.poisson(lam)
+        if n_events == 0:
+            continue
+
+        # 2) Day-of-year + hour with min separation (no thinning)
+        doy, hour, t, month, day = lcgen.sampling.sample_year_events(
+            lam=lam,
+            cdf_day=relative_probs_df["Cumulative trop prob"],
+            min_sep_days=min_sep_days,
+            year=year,
+            rng=rng,
+        )
+
+        n_kept = doy.size
+        if n_kept == 0:
+            continue
+
+        # 3) populate Storm IDs
+        u_id = rand(n_kept)
+        idx_id = np.searchsorted(storm_set["cdf"], u_id, side="right")
+        sid = storm_set["storm_ID"][idx_id]
+        rcdf = storm_set["cdf"][idx_id]
+
+        # 4) Convert day_idx -> month/day for outputs (if desired)
+        base = dt.datetime(year, 1, 1)
+        for k in range(n_kept):
+            timestamp = base + dt.timedelta(
+                days=int(day_idx[k]) - 1, hours=float(hour[k])
+            )
+            records.append(
+                {
+                    "lifecycle": lifecycle_index,
+                    "year_offset": year_offset,
+                    "year": year,
+                    "day_of_year": int(day_idx[k]),
+                    "month": timestamp.month,
+                    "day": timestamp.day,
+                    "hour": timestamp.hour,
+                    "storm_id": int(sid[k]),
+                    "rcdf": float(rcdf[k]),
+                }
+            )
+
+    return pd.DataFrame.from_records(records)
 
 
 def sample_poisson_count_with_cap(
