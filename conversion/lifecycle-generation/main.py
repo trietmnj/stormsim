@@ -52,6 +52,7 @@ def main():
 
     # Full simulation using calibrated lambda
     for lc in range(NUM_LCS):
+        print(f"[info] Simulating lifecycle {lc + 1} of {NUM_LCS}...")
         df = lcgen.sampling.simulate_lifecycle(
             lifecycle_index=lc,
             init_year=INITIALIZE_YEAR,
@@ -67,8 +68,8 @@ def main():
         df_ids = df[cols].copy()
         all_dfs.append(df_ids)
 
-        ids_path = OUTPUT_DIRECTORY / f"EventDate_LC_{lc}.csv"
-        df_ids.to_csv(ids_path, index=False)
+    data = pd.concat(all_dfs, ignore_index=True)
+    data.to_csv(OUTPUT_DIRECTORY / f"EventDate_LC.csv", index=False)
 
     if VALIDATE_LAMBDA:
         # Concatenate all lifecycles for validation (use in-memory frames)
