@@ -9,7 +9,7 @@ from tqdm.auto import tqdm  # <-- progress bar
 # -----------------------------
 INITIALIZE_YEAR = 2033
 LIFECYCLE_DURATION = 50  # number of years in a lifecycle
-NUM_LCS = 1  # number of lifecycles
+NUM_LCS = 100  # number of lifecycles
 LAM = 1.7  # local storm recurrence rate (Poisson lambda)
 
 # minimum separation between storms in days
@@ -18,10 +18,10 @@ MIN_ARRIVAL_EXTRA_DAYS = 4.0  # not used yet, but kept for future
 
 REL_PROB_FILE = "../data/raw/conversion-lifecycle-generation/Relative_probability_bins_Atlantic 4.csv"
 STORM_ID_PROB_FILE = "../data/intermediate/stormprob.csv"
-OUTPUT_DIRECTORY = Path("../data/intermediate/")
+OUTPUT_DIRECTORY = Path("../data/intermediate/conversion-lifecycle-generation/")
 
 RNG = np.random.default_rng()  # consistent RNG
-PROFILE = True  # set to True to enable cProfile profiling
+PROFILE = False  # set to True to enable cProfile profiling
 
 
 # -----------------------------
@@ -61,7 +61,10 @@ def _inverse_cdf_sample(u: np.ndarray, cdf: np.ndarray) -> np.ndarray:
     cdf[idx] is the first element > u (standard inverse CDF sampling).
     """
     idx = np.searchsorted(cdf, u, side="right")
-    idx = np.clip(idx, 0, len(cdf) - 1)
+    last = len(cdf) - 1
+    over = idx > last
+    if np.any(over):
+        idx[over] = last
     return idx
 
 
@@ -73,6 +76,26 @@ def _enforce_min_separation_days(times: np.ndarray, min_sep_days: float) -> bool
     if len(times) <= 1:
         return True
     return np.all(np.diff(times) >= min_sep_days)
+
+
+def _thin_by_min_separation(times: np.ndarray, min_sep_days: float) -> np.ndarray:
+    """
+    Given sorted times (days since Jan 1), keep only events such that each kept
+    event is at least min_sep_days after the last kept one.
+
+    Returns indices into the original `times` array (after sorting).
+    """
+    n = times.size
+    if n == 0:
+        return np.empty(0, dtype=int)
+
+    keep = [0]
+    last_t = times[0]
+    for i in range(1, n):
+        if times[i] - last_t >= min_sep_days:
+            keep.append(i)
+            last_t = times[i]
+    return np.asarray(keep, dtype=int)
 
 
 # -----------------------------
@@ -89,33 +112,47 @@ def _simulate_lifecycle_with_calendar(
     min_sep_days: float,
     show_progress: bool = False,
 ) -> pd.DataFrame:
-    records = []
+    records: list[dict] = []
+
     year_iter = (
         tqdm(
-            range(duration_years), desc=f"LC {lifecycle_index} (calendar)", leave=False
+            range(duration_years),
+            desc=f"LC {lifecycle_index} (calendar)",
+            leave=False,
         )
         if show_progress
         else range(duration_years)
     )
+
     for year_offset in year_iter:
         n_events = RNG.poisson(lam)
         if n_events == 0:
             continue
 
-        while True:
-            u = np.sort(RNG.random(n_events))
-            idx = _inverse_cdf_sample(u, cum_probs)
+        # 1) sample events once
+        u = RNG.random(n_events)  # no need to sort u
+        idx = _inverse_cdf_sample(u, cum_probs)
 
-            mo = months[idx]
-            da = days[idx]
-            hour = RNG.random(n_events) * 24.0
-            t = da + hour / 24.0
+        mo = months[idx]
+        da = days[idx]
+        hour = RNG.random(n_events) * 24.0
 
-            if _enforce_min_separation_days(t, min_sep_days):
-                break
+        # 2) build within-year time and sort
+        t = da + hour / 24.0
+        order = np.argsort(t)
+        t = t[order]
+        mo = mo[order]
+        da = da[order]
+        hour = hour[order]
+
+        # 3) thin by min separation
+        keep_idx = _thin_by_min_separation(t, min_sep_days)
+        if keep_idx.size == 0:
+            # all storms too close together given this year's realization
+            continue
 
         year = init_year + year_offset
-        for k in range(n_events):
+        for k in keep_idx:
             records.append(
                 {
                     "lifecycle": lifecycle_index,
@@ -144,40 +181,53 @@ def _simulate_lifecycle_with_storm_ids(
     Simulate one lifecycle of storms using the CHS storm ID probability file.
     Here we sample storm IDs and assign random (month, day) within a year.
     """
+    records: list[dict] = []
 
     year_iter = (
         tqdm(
-            range(duration_years), desc=f"LC {lifecycle_index} (Storm ID)", leave=False
+            range(duration_years),
+            desc=f"LC {lifecycle_index} (Storm ID)",
+            leave=False,
         )
         if show_progress
         else range(duration_years)
     )
-    records = []
+
     for year_offset in year_iter:
         n_events = RNG.poisson(lam)
-
         if n_events == 0:
             continue
 
-        while True:
-            u = np.sort(RNG.random(n_events))
-            idx = _inverse_cdf_sample(u, cdf)
+        # 1) sample storm IDs once
+        u = RNG.random(n_events)
+        idx = _inverse_cdf_sample(u, cdf)
 
-            sid = storm_ids[idx]
-            rcdf = cdf[idx]
+        sid = storm_ids[idx]
+        rcdf = cdf[idx]
 
-            # For now: random month/day (you can replace with a calendar file)
-            mo = RNG.integers(1, 13, size=n_events)  # 1–12
-            da = RNG.integers(1, 32, size=n_events)  # 1–31 (no month-length check)
+        # random month/day (placeholder until you wire in real seasonal calendar)
+        mo = RNG.integers(1, 13, size=n_events)  # 1–12
+        da = RNG.integers(1, 32, size=n_events)  # 1–31
 
-            hour = RNG.random(n_events) * 24.0
-            t = da + hour / 24.0
+        hour = RNG.random(n_events) * 24.0
 
-            if _enforce_min_separation_days(t, min_sep_days):
-                break
+        # 2) build within-year time and sort
+        t = da + hour / 24.0
+        order = np.argsort(t)
+        t = t[order]
+        mo = mo[order]
+        da = da[order]
+        hour = hour[order]
+        sid = sid[order]
+        rcdf = rcdf[order]
+
+        # 3) thin by min separation
+        keep_idx = _thin_by_min_separation(t, min_sep_days)
+        if keep_idx.size == 0:
+            continue
 
         year = init_year + year_offset
-        for k in range(n_events):
+        for k in keep_idx:
             records.append(
                 {
                     "lifecycle": lifecycle_index,
@@ -234,11 +284,6 @@ def main():
 
         ids_path = OUTPUT_DIRECTORY / f"EventDate_LC_{lc}_with_ids.csv"
         df_ids.to_csv(ids_path, index=False)
-
-        # Optional: lightweight per-iteration log in the tqdm bar
-        tqdm.write(
-            f"LC {lc}: calendar events={len(df_calendar)}, id events={len(df_ids)}"
-        )
 
 
 if __name__ == "__main__":

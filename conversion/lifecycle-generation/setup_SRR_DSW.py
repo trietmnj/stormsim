@@ -15,7 +15,7 @@ INPUT_MAT_FILES = [
     "CHS-NA_ITCS_Param.mat",
     "CHS-NA_ITCS_DSW_600km.mat",
 ]
-OUTPUT_PATH = Path("../data/intermediate/stormprob.csv")
+OUTPUT_PATH = Path("../data/intermediate/conversion-lifecycle-generation/stormprob.csv")
 EARTH_RADIUS_KM = 6371.0
 
 
