@@ -4,7 +4,8 @@ from scipy.io import loadmat
 from pathlib import Path
 import pandas as pd
 
-MAT_FILES = [
+BASE_INPUT_DIR = Path("../data/raw/conversion-lifecycle-generation/CHS_Files")
+INPUT_MAT_FILES = [
     "CHS-NA_nodeID_v4.mat",
     "CHS_Atl_CRLs_v1.6.mat",
     "SRR_TC_All_600km.mat",
@@ -14,7 +15,7 @@ MAT_FILES = [
     "CHS-NA_ITCS_Param.mat",
     "CHS-NA_ITCS_DSW_600km.mat",
 ]
-BASE_DIR = Path("../data/raw/conversion-lifecycle-generation/CHS_Files")
+OUTPUT_PATH = Path("../data/intermediate/stormprob.csv")
 EARTH_RADIUS_KM = 6371.0
 
 
@@ -151,8 +152,8 @@ def find_nearest_latlon(
 
 def main():
     ## LOAD MAT FILES FROM CHS
-    mat_files = MAT_FILES
-    base_dir = BASE_DIR
+    mat_files = INPUT_MAT_FILES
+    base_dir = BASE_INPUT_DIR
     files_to_load = [base_dir / f for f in mat_files]
 
     # Define CHS-Region
@@ -277,7 +278,7 @@ def main():
 
     SIDprob = pd.concat([SID, prob_dsw], axis=1)
 
-    out_path = Path("stormprob.csv")
+    out_path = OUTPUT_PATH
     SIDprob.to_csv(out_path, index=False)
     print(f"Wrote storm ID + probability table to {out_path.resolve()}")
 
