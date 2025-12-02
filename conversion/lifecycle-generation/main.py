@@ -9,16 +9,14 @@ from tqdm.auto import tqdm  # <-- progress bar
 # -----------------------------
 INITIALIZE_YEAR = 2033
 LIFECYCLE_DURATION = 50  # number of years in a lifecycle
-NUM_LCS = 100  # number of lifecycles
+NUM_LCS = 1  # number of lifecycles
 LAM = 1.7  # local storm recurrence rate (Poisson lambda)
 
 # minimum separation between storms in days
 MIN_ARRIVAL_TROP_DAYS = 7.0
 MIN_ARRIVAL_EXTRA_DAYS = 4.0  # not used yet, but kept for future
 
-REL_PROB_FILE = (
-    "../data/raw/conversion-lifecycle-generation/Relative_probability_bins_Atlantic 4.csv"
-)
+REL_PROB_FILE = "../data/raw/conversion-lifecycle-generation/Relative_probability_bins_Atlantic 4.csv"
 STORM_ID_PROB_FILE = "../data/intermediate/stormprob.csv"
 OUTPUT_DIRECTORY = Path("../data/intermediate/")
 
@@ -88,20 +86,21 @@ def _simulate_lifecycle_with_calendar(
     months: np.ndarray,
     days: np.ndarray,
     min_sep_days: float,
+    show_progress: bool = False,
 ) -> pd.DataFrame:
-    """
-    Simulate one lifecycle of storms using the daily calendar probability bins
-    (Month, Day, cumulative probability).
-    """
     records = []
-
-    for year_offset in range(duration_years):
+    year_iter = (
+        tqdm(
+            range(duration_years), desc=f"LC {lifecycle_index} (calendar)", leave=False
+        )
+        if show_progress
+        else range(duration_years)
+    )
+    for year_offset in year_iter:
         n_events = RNG.poisson(lam)
-
         if n_events == 0:
             continue
 
-        # Sample storm times within the year and enforce min separation
         while True:
             u = np.sort(RNG.random(n_events))
             idx = _inverse_cdf_sample(u, cum_probs)
@@ -109,9 +108,6 @@ def _simulate_lifecycle_with_calendar(
             mo = months[idx]
             da = days[idx]
             hour = RNG.random(n_events) * 24.0
-
-            # A crude within-year time measure: day + hour/24
-            # (ignores month length; you can refine if needed)
             t = da + hour / 24.0
 
             if _enforce_min_separation_days(t, min_sep_days):
@@ -141,14 +137,22 @@ def _simulate_lifecycle_with_storm_ids(
     cdf: np.ndarray,
     storm_ids: np.ndarray,
     min_sep_days: float,
+    show_progress: bool = False,
 ) -> pd.DataFrame:
     """
     Simulate one lifecycle of storms using the CHS storm ID probability file.
     Here we sample storm IDs and assign random (month, day) within a year.
     """
-    records = []
 
-    for year_offset in range(duration_years):
+    year_iter = (
+        tqdm(
+            range(duration_years), desc=f"LC {lifecycle_index} (Storm ID)", leave=False
+        )
+        if show_progress
+        else range(duration_years)
+    )
+    records = []
+    for year_offset in year_iter:
         n_events = RNG.poisson(lam)
 
         if n_events == 0:
@@ -216,25 +220,40 @@ def main():
         calendar_path = OUTPUT_DIRECTORY / f"EventDate_LC_{lc}_calendar.csv"
         df_calendar.to_csv(calendar_path, index=False)
 
-        # --- Storm-ID-based simulation
-        df_ids = _simulate_lifecycle_with_storm_ids(
-            lifecycle_index=lc,
-            init_year=INITIALIZE_YEAR,
-            duration_years=LIFECYCLE_DURATION,
-            lam=LAM,
-            cdf=cdf,
-            storm_ids=storm_ids,
-            min_sep_days=MIN_ARRIVAL_TROP_DAYS,
-        )
-
-        ids_path = OUTPUT_DIRECTORY / f"EventDate_LC_{lc}_with_ids.csv"
-        df_ids.to_csv(ids_path, index=False)
-
+        # # --- Storm-ID-based simulation
+        # df_ids = _simulate_lifecycle_with_storm_ids(
+        #     lifecycle_index=lc,
+        #     init_year=INITIALIZE_YEAR,
+        #     duration_years=LIFECYCLE_DURATION,
+        #     lam=LAM,
+        #     cdf=cdf,
+        #     storm_ids=storm_ids,
+        #     min_sep_days=MIN_ARRIVAL_TROP_DAYS,
+        # )
+        #
+        # ids_path = OUTPUT_DIRECTORY / f"EventDate_LC_{lc}_with_ids.csv"
+        # df_ids.to_csv(ids_path, index=False)
+        #
         # Optional: lightweight per-iteration log in the tqdm bar
-        tqdm.write(
-            f"LC {lc}: calendar events={len(df_calendar)}, id events={len(df_ids)}"
-        )
+        # tqdm.write(
+        #     f"LC {lc}: calendar events={len(df_calendar)}, id events={len(df_ids)}"
+        # )
 
 
 if __name__ == "__main__":
+    # main()
+
+    import cProfile
+    import pstats
+    import io
+
+    pr = cProfile.Profile()
+    pr.enable()
+
     main()
+
+    pr.disable()
+    s = io.StringIO()
+    ps = pstats.Stats(pr, stream=s).sort_stats("cumtime")  # or "tottime"
+    ps.print_stats(40)  # top 40 entries
+    print(s.getvalue())
