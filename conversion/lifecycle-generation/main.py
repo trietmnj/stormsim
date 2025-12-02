@@ -27,7 +27,7 @@ RNG = np.random.default_rng()  # consistent RNG
 # -----------------------------
 # HELPERS
 # -----------------------------
-def load_relative_probabilities(filepath: str):
+def _load_relative_probabilities(filepath: str):
     """
     Load daily cumulative storm probabilities by (Month, Day).
     Expects columns: 'Month', 'Day', 'Cumulative trop prob'.
@@ -39,7 +39,7 @@ def load_relative_probabilities(filepath: str):
     return cum_probs, months, days
 
 
-def load_storm_id_cdf(filepath: str):
+def _load_storm_id_cdf(filepath: str):
     """
     Load storm IDs and their probabilities from CHS master track.
     Expects columns: 'storm_ID', 'DSW' (or similar).
@@ -55,7 +55,7 @@ def load_storm_id_cdf(filepath: str):
     return cdf, storm_ids
 
 
-def inverse_cdf_sample(u: np.ndarray, cdf: np.ndarray) -> np.ndarray:
+def _inverse_cdf_sample(u: np.ndarray, cdf: np.ndarray) -> np.ndarray:
     """
     Given uniform samples u in [0, 1), return indices into cdf such that
     cdf[idx] is the first element > u (standard inverse CDF sampling).
@@ -65,7 +65,7 @@ def inverse_cdf_sample(u: np.ndarray, cdf: np.ndarray) -> np.ndarray:
     return idx
 
 
-def enforce_min_separation_days(times: np.ndarray, min_sep_days: float) -> bool:
+def _enforce_min_separation_days(times: np.ndarray, min_sep_days: float) -> bool:
     """
     Simple check: given within-year times (days since Jan 1, as floats),
     returns True if all adjacent events are at least min_sep_days apart.
@@ -78,7 +78,7 @@ def enforce_min_separation_days(times: np.ndarray, min_sep_days: float) -> bool:
 # -----------------------------
 # SIMULATION ROUTINES
 # -----------------------------
-def simulate_lifecycle_with_calendar(
+def _simulate_lifecycle_with_calendar(
     lifecycle_index: int,
     init_year: int,
     duration_years: int,
@@ -103,7 +103,7 @@ def simulate_lifecycle_with_calendar(
         # Sample storm times within the year and enforce min separation
         while True:
             u = np.sort(RNG.random(n_events))
-            idx = inverse_cdf_sample(u, cum_probs)
+            idx = _inverse_cdf_sample(u, cum_probs)
 
             mo = months[idx]
             da = days[idx]
@@ -113,7 +113,7 @@ def simulate_lifecycle_with_calendar(
             # (ignores month length; you can refine if needed)
             t = da + hour / 24.0
 
-            if enforce_min_separation_days(t, min_sep_days):
+            if _enforce_min_separation_days(t, min_sep_days):
                 break
 
         year = init_year + year_offset
@@ -132,7 +132,7 @@ def simulate_lifecycle_with_calendar(
     return pd.DataFrame.from_records(records)
 
 
-def simulate_lifecycle_with_storm_ids(
+def _simulate_lifecycle_with_storm_ids(
     lifecycle_index: int,
     init_year: int,
     duration_years: int,
@@ -155,7 +155,7 @@ def simulate_lifecycle_with_storm_ids(
 
         while True:
             u = np.sort(RNG.random(n_events))
-            idx = inverse_cdf_sample(u, cdf)
+            idx = _inverse_cdf_sample(u, cdf)
 
             sid = storm_ids[idx]
             rcdf = cdf[idx]
@@ -167,7 +167,7 @@ def simulate_lifecycle_with_storm_ids(
             hour = RNG.random(n_events) * 24.0
             t = da + hour / 24.0
 
-            if enforce_min_separation_days(t, min_sep_days):
+            if _enforce_min_separation_days(t, min_sep_days):
                 break
 
         year = init_year + year_offset
@@ -195,13 +195,13 @@ def main():
     OUTPUT_DIRECTORY.mkdir(parents=True, exist_ok=True)
 
     # Load inputs
-    cum_probs, months, days = load_relative_probabilities(REL_PROB_FILE)
-    cdf, storm_ids = load_storm_id_cdf(STORM_ID_PROB_FILE)
+    cum_probs, months, days = _load_relative_probabilities(REL_PROB_FILE)
+    cdf, storm_ids = _load_storm_id_cdf(STORM_ID_PROB_FILE)
 
     # Run lifecycles
     for lc in range(NUM_LCS):
         # --- Calendar-based simulation (uses Month/Day/CDF from file)
-        df_calendar = simulate_lifecycle_with_calendar(
+        df_calendar = _simulate_lifecycle_with_calendar(
             lifecycle_index=lc,
             init_year=INITIALIZE_YEAR,
             duration_years=LIFECYCLE_DURATION,
@@ -216,7 +216,7 @@ def main():
         df_calendar.to_csv(calendar_path, index=False)
 
         # --- Storm-ID-based simulation
-        df_ids = simulate_lifecycle_with_storm_ids(
+        df_ids = _simulate_lifecycle_with_storm_ids(
             lifecycle_index=lc,
             init_year=INITIALIZE_YEAR,
             duration_years=LIFECYCLE_DURATION,
