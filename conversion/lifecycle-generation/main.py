@@ -68,16 +68,6 @@ def _inverse_cdf_sample(u: np.ndarray, cdf: np.ndarray) -> np.ndarray:
     return idx
 
 
-def _enforce_min_separation_days(times: np.ndarray, min_sep_days: float) -> bool:
-    """
-    Simple check: given within-year times (days since Jan 1, as floats),
-    returns True if all adjacent events are at least min_sep_days apart.
-    """
-    if len(times) <= 1:
-        return True
-    return np.all(np.diff(times) >= min_sep_days)
-
-
 def _thin_by_min_separation(times: np.ndarray, min_sep_days: float) -> np.ndarray:
     """
     Given sorted times (days since Jan 1), keep only events such that each kept
