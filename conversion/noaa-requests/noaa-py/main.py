@@ -24,7 +24,7 @@ if __name__ == "__main__":
     id_list = ["123456"]  # station ids
     requested_datum = "MSL"
     prod = ["Verified Monthly Mean Water Level"]
-    op_mode = 1  # Full record
+    op_mode = "full_record"  # Full record
     d_beg = None  # Not used in full record mode
     d_end = None  # Not used in full record mode
 
