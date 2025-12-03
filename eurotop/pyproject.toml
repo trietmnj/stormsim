@@ -1,0 +1,17 @@
+[project]
+name = "eurotop"
+version = "0.1.0"
+dependencies = [
+    "numpy",
+    "pandas",
+    "h5py",
+]
+requires-python = ">=3.8"
+
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+# [tool.setuptools.packages.find]
+where = ["."]

@@ -3,8 +3,6 @@
 .DS_Store
 
 data/*
-!data/raw/
-!data/raw/conversion-lifecycle-generation/
 !data/raw/conversion-lifecycle-generation/**
 !data/intermediate/
 !data/intermediate/conversion-lifecycle-generation/
@@ -14,3 +12,5 @@ data/*
 
 **egg-info/
 uv.lock
+
+**python_outputs**
