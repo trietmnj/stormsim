@@ -5,12 +5,12 @@ import noaapy
 
 
 def wl_downloader_v2(
-    id_list, station_list, requested_datum, prod, op_mode, d_beg, d_end
+    id_list, station_list, requested_datum, prod, operation, begin_date, end_date
 ):
     """Entry point to the download"""
-    if op_mode not in [1, 2]:
+    if operation not in ["full_record", "specific_date"]:
         raise ValueError(
-            "Please use a valid operational mode (1 - full record, 2 - Specific Date)"
+            "Please use a valid operational mode: full_record or specific_date)"
         )
 
     # Start Timer
@@ -58,9 +58,7 @@ def wl_downloader_v2(
             }
 
             # Check WL Measurements Products Available
-            flag4, flag1, indx = noaapy.wl_measurements_product_selector_v2(
-                station, product
-            )
+            flag4, flag1, indx = noaapy.measurements_product_flags(station, product)
 
             if flag4 == 1:
                 s_data_entry.update(
@@ -79,16 +77,16 @@ def wl_downloader_v2(
                 continue
 
             # Check if Date Range of Interest is Available
-            if op_mode == 2:
-                indx, d_end, d_beg, dummy3 = noaapy.date_search(
-                    station, d_beg, d_end, indx
+            if operation == "specific_date":
+                indx, end_date, begin_date, dummy3 = noaapy.date_search(
+                    station, begin_date, end_date, indx
                 )
                 if not dummy3:
                     station["start_date"][indx] = (
-                        f"{d_beg.strftime('%Y-%m-%d %H:%M:%S')} GMT"
+                        f"{begin_date.strftime('%Y-%m-%d %H:%M:%S')} GMT"
                     )
                     station["end_date"][indx] = (
-                        f"{d_end.strftime('%Y-%m-%d %H:%M:%S')} GMT"
+                        f"{end_date.strftime('%Y-%m-%d %H:%M:%S')} GMT"
                     )
                 else:
                     s_data_entry.update(
@@ -124,7 +122,7 @@ def wl_downloader_v2(
                 {
                     "WL_datum": datum,
                     "TP_datum": datum_p,
-                    "WL_downloaded_product": product_label(flag1),
+                    "WL_downloaded_product": noaapy.globals.PRODUCT_LABELS[flag1],
                     "TP_downloaded_product": interval,
                     "record_length": station["record_length"][indx],
                 }
@@ -192,16 +190,6 @@ def wl_downloader_v2(
     # End Timer
     end_time = datetime.datetime.now()
     run_time = end_time - start_time
+    print(f"Total Run Time: {run_time}")
 
     return s_data, not_found
-
-
-def product_label(flag):
-    labels = {
-        "6": "6 minutes",
-        "1": "hourly",
-        "6p": "6 minutes preliminary",
-        "hilo": "High/Low",
-        "m": "monthly",
-    }
-    return labels.get(flag, "unknown")
