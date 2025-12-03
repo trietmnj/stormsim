@@ -50,8 +50,6 @@ def simulate_lifecycle(
             min_sep_days=min_sep_days,
             rng=rng,
         )
-        if failed:
-            n_failed += 1
 
         n_kept = doy.size
         if n_kept == 0:
@@ -78,8 +76,6 @@ def simulate_lifecycle(
                     "rcdf": float(rcdf[k]),
                 }
             )
-
-    print(f"[info] Lifecycle {lifecycle_index}: {n_failed} failed years out of {duration_years}")
     return pd.DataFrame.from_records(records)
 
 
@@ -88,7 +84,6 @@ def _sample_year(
     prob_schedule: pd.DataFrame,
     min_sep_days: float,
     rng: Optional[np.random.Generator] = None,
-    max_attempts: int = 1000,
 ):
     """
     High-level: sample all storms in a given year, enforcing:
@@ -118,7 +113,6 @@ def _sample_year(
         prob_schedule=prob_schedule,
         min_sep_days=min_sep_days,
         rng=rng,
-        max_attempts=max_attempts,
     )
 
     return doy, hour, failed
@@ -161,30 +155,38 @@ def _sample_with_minimal_arrival(
     last_doy = last_hour = None
 
     failed = True
+    gaps = None
     for _ in range(max_attempts):
         doy = _sample_day_of_year(prob_schedule, rng, n_storms)
         hour = rng.random(n_storms) * 24.0
 
-        t = doy + hour / 24.0
-        order = np.argsort(t)
+        timestamps = doy + hour / 24.0
+        order = np.argsort(timestamps)
         doy = doy[order]
         hour = hour[order]
+        timestamps = timestamps[order]
         last_doy, last_hour = doy, hour
         if n_storms <= 1:
             failed = False
             break
 
-        gaps = np.diff(t)
+        gaps = np.diff(timestamps)
         if np.all(gaps >= min_sep_days):
             failed = False
+            # return last_doy, last_hour, False
             break  # success
 
     if last_doy is None:
+        failed = False
         return (
             np.array([], dtype=int),
             np.array([], dtype=float),
             False,
         )
+    if failed:
+        print("Failed to sample with min separation:")
+        print(f"n_storms={n_storms} min_sep_days: {min_sep_days}")
+        print(f"timestamps={timestamps}, gaps={gaps}")
 
     return last_doy, last_hour, failed
 

@@ -13,19 +13,20 @@ INITIALIZE_YEAR = 2033
 LIFECYCLE_DURATION = 50  # number of years in a lifecycle
 NUM_LCS = 100  # number of lifecycles
 LAM_TARGET = 1.7  # local storm recurrence rate (Poisson lambda)
-YEAR_LENGTH_DAYS = 365.0
 
 # minimum separation between storms in days
 MIN_ARRIVAL_TROP_DAYS = 7.0
 MIN_ARRIVAL_EXTRA_DAYS = 4.0  # not used yet, but kept for future
 
 REL_PROB_FILE = "../data/raw/conversion-lifecycle-generation/Relative_probability_bins_Atlantic 4.csv"
-STORM_ID_PROB_FILE = "../data/intermediate/stormprob.csv"
+STORM_ID_PROB_FILE = (
+    "../data/intermediate/conversion-lifecycle-generation/stormprob.csv"
+)
 OUTPUT_DIRECTORY = Path("../data/intermediate/conversion-lifecycle-generation/")
 
 RNG = np.random.default_rng()  # consistent RNG
 PROFILE = False  # set to True to enable cProfile profiling
-VALIDATE_LAMBDA = True  # set to True to run validation after simulating
+VALIDATE_LAMBDA = False  # set to True to run validation after simulating
 
 
 # -----------------------------
@@ -52,7 +53,6 @@ def main():
 
     # Full simulation using calibrated lambda
     for lc in range(NUM_LCS):
-        print(f"[info] Simulating lifecycle {lc + 1} of {NUM_LCS}...")
         df = lcgen.sampling.simulate_lifecycle(
             lifecycle_index=lc,
             init_year=INITIALIZE_YEAR,
