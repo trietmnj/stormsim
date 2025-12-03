@@ -46,7 +46,7 @@ def main():
         "day",
         "hour",
         "storm_id",
-        "rcdf",
+        # "rcdf",
     ]
 
     all_dfs: list[pd.DataFrame] = []
