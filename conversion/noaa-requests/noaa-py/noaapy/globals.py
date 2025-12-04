@@ -27,6 +27,4 @@ PRODUCT_PARAM = {
     "6p": "water_level",
     "1": "hourly_height",
     "hilo": "high_low",
-    "6p": "water_level",
-    "6p": "water_level",
 }

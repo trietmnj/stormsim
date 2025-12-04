@@ -30,7 +30,7 @@ def download(
     timezone = noaapy.globals.DEFAULT_TIMEZONE
     units = noaapy.globals.DEFAULT_UNITS
     data_format = noaapy.globals.DEFAULT_DATA_FORMAT
-    gen_url = noaapy.globals.DEFAULT_API_URL
+    gen_url = noaapy.globals.BASE_API_URL
     timeout = noaapy.globals.DEFAULT_TIMEOUT
 
     # Check if stations are in inventory
