@@ -1,16 +1,11 @@
 **/__pycache__/**
 **/.venv/**
 .DS_Store
-
-data/*
-!data/raw/conversion-lifecycle-generation/**
-!data/intermediate/
-!data/intermediate/conversion-lifecycle-generation/
-data/intermediate/conversion-lifecycle-generation/EventDate_LC.csv
-!data/finished/
-!data/finished/conversion-lifecycle-generation.main.log
-
 **egg-info/
 uv.lock
+
+data/*
+!**.gitkeep
+!data/raw/conversion-lifecycle-generation/**
 
 **python_outputs**
