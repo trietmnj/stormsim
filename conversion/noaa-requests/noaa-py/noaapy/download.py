@@ -2,8 +2,8 @@
 import datetime
 from io import StringIO
 from typing import Any, Dict, List, Sequence, Tuple, Iterable
-import requests
 
+import requests
 import pandas as pd
 
 import noaapy
