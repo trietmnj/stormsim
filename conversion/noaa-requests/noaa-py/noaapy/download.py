@@ -1,7 +1,8 @@
 # noaa-requests/noaa-py/download.py
 import datetime
 from io import StringIO
-from typing import Any, Dict, List, Sequence, Tuple, Iterable
+from typing import Any, Dict, List, Sequence, Tuple, Iterable, Optional
+from dataclasses import dataclass
 
 import requests
 import pandas as pd
@@ -9,16 +10,27 @@ import pandas as pd
 import noaapy
 
 
+class DownloadDataConfig(dataclass):
+    station_ids: List[str]
+    datum: str
+    prod: List[str]
+    op_mode: str
+    d_beg: Optional[str] = None
+    d_end: Optional[str] = None
+
+
 def download(
-    id_list,
+    download_data_cfg: DownloadDataConfig,
     station_list,
-    requested_datum,
-    prod,
-    operation,
-    begin_date,
-    end_date,
 ):
     """Entry point to the download."""
+    station_ids = download_data_cfg.station_ids
+    requested_datum = download_data_cfg.datum
+    prod = download_data_cfg.prod
+    operation = download_data_cfg.op_mode
+    begin_date = download_data_cfg.d_beg
+    end_date = download_data_cfg.d_end
+
     _validate_operation(operation)
     start_time = datetime.datetime.now()
 
@@ -33,13 +45,13 @@ def download(
 
     # Station lookup and validity check
     station_lookup = _build_station_lookup(station_list)
-    id_list, not_found = _filter_station_ids(id_list, station_lookup)
+    station_ids, not_found = _filter_station_ids(station_ids, station_lookup)
 
     # Results container
     data: List[Dict[str, Any]] = []
 
     # Loop over stations and products
-    for _, station_id in enumerate(id_list):
+    for _, station_id in enumerate(station_ids):
         station = station_lookup[station_id]
         for product in prod:
             # Create base entry and append immediately so all helpers
@@ -200,7 +212,7 @@ def _base_sdata_entry(station_id: str, station: Dict[str, Any]) -> Dict[str, Any
     return {
         "id": station_id,
         "name": station["name"],
-        "lon": station["lon"],
+        "lon": station["lng"],
         "lat": station["lat"],
         "state": station["state"],
         "WL_datum": "Not found",
