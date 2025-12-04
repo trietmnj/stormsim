@@ -6,7 +6,7 @@ DEFAULT_UNITS = "metric"  # Preferred Units for Data Download
 DEFAULT_DATA_FORMAT = "csv"  # Download Data Format
 DEFAULT_TIMEOUT = 800
 
-PRODUCT_FLAGS = {
+INTERVAL_NAME_TO_PARAM = {
     "Verified Monthly Mean Water Level": "m",
     "Verified Hourly Height Water Level": "1",
     "Verified 6-Minute Water Level": "6",
@@ -22,7 +22,7 @@ PRODUCT_LABELS = {
     "m": "monthly",
 }
 
-PRODUCT_PARAM = {
+INTERVAL_TO_PRODUCT_PARAM = {
     "6": "water_level",
     "6p": "water_level",
     "1": "hourly_height",

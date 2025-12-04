@@ -1,10 +1,13 @@
 # noaa-requests/noaa-py/main.py
 import noaapy
 
+# api docs
+# https://api.tidesandcurrents.noaa.gov/api/prod/
+
 if __name__ == "__main__":
     station_list = [
         {
-            "id": "123456",
+            "id": "9414290 ",
             "name": "Example Station",
             "lon": -70.12345,
             "lat": 40.67891,
@@ -13,15 +16,10 @@ if __name__ == "__main__":
             "start_date": ["1900-01-01"],
             "end_date": ["2025-12-29"],
             "greatlakes": 0,
-            "WL_products": [
-                "Verified Monthly Mean Water Level",
-                "Verified Hourly Height Water Level",
-                "Verified 6-Minute Water Level",
-            ],
         }
     ]
 
-    id_list = ["123456"]  # station ids
+    id_list = ["9414290"]  # station ids
     requested_datum = "MSL"
     prod = ["Verified Monthly Mean Water Level"]
     op_mode = "full_record"  # Full record
