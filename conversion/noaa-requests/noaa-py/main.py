@@ -29,7 +29,7 @@ if __name__ == "__main__":
     d_end = None  # Not used in full record mode
 
     # Call the downloader function
-    downloaded_data, not_found = noaapy.wl_downloader_v2(
+    downloaded_data, not_found = noaapy.download(
         id_list,
         station_list,
         requested_datum,

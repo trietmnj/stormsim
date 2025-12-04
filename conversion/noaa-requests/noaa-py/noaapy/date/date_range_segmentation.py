@@ -2,6 +2,17 @@ from datetime import datetime, timedelta
 from typing import List, Tuple, Dict, Any
 
 
+def _parse_dt(s: str) -> datetime:
+    # MATLAB uses s(1:end-4) to drop fractional seconds / TZ if present
+    # assume first 19 chars are 'yyyy-mm-dd HH:MM:SS'
+    return datetime.strptime(s[:19], "%Y-%m-%d %H:%M:%S")
+
+
+def _fmt_dt(dt: datetime) -> str:
+    # MATLAB: 'yyyymmdd HH:MM'
+    return dt.strftime("%Y%m%d %H:%M")
+
+
 def date_range_segmentation(
     d_struct: Dict[str, List[str]],
     flag1: str,
@@ -41,21 +52,12 @@ def date_range_segmentation(
     st_dates: List[List[str]] = []
     end_dates: List[List[str]] = []
 
-    def parse_dt(s: str) -> datetime:
-        # MATLAB uses s(1:end-4) to drop fractional seconds / TZ if present
-        # assume first 19 chars are 'yyyy-mm-dd HH:MM:SS'
-        return datetime.strptime(s[:19], "%Y-%m-%d %H:%M:%S")
-
-    def fmt_dt(dt: datetime) -> str:
-        # MATLAB: 'yyyymmdd HH:MM'
-        return dt.strftime("%Y%m%d %H:%M")
-
     for idx in indx:
         start_str = start_date_list[idx]
         end_str = end_date_list[idx]
 
-        start_dt = parse_dt(start_str)
-        end_dt = parse_dt(end_str)
+        start_dt = _parse_dt(start_str)
+        end_dt = _parse_dt(end_str)
 
         # Build the dummy time vector with suggested dt_s
         dummy: List[datetime] = [start_dt]
@@ -68,8 +70,8 @@ def date_range_segmentation(
 
         # Segment start/end lists:
         # dummy[0]→dummy[1], dummy[1]→dummy[2], ..., dummy[-2]→dummy[-1]
-        starts = [fmt_dt(t) for t in dummy[:-1]]
-        ends = [fmt_dt(t) for t in dummy[1:]]
+        starts = [_fmt_dt(t) for t in dummy[:-1]]
+        ends = [_fmt_dt(t) for t in dummy[1:]]
 
         st_dates.append(starts)
         end_dates.append(ends)

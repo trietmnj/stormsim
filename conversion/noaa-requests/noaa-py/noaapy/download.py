@@ -1,11 +1,207 @@
-# noaa-requests/noaa-py/noaapy/wl_download.py
+# noaa-requests/noaa-py/download.py
+import datetime
 import time
 from io import StringIO
 from typing import Any, Dict, List
-
-import numpy as np
-import pandas as pd
 import requests
+
+import pandas as pd
+import numpy as np
+
+import noaapy
+
+# https://api.tidesandcurrents.noaa.gov/api/prod/
+
+
+def download(
+    id_list, station_list, requested_datum, prod, operation, begin_date, end_date
+):
+    """Entry point to the download"""
+    if operation not in ["full_record", "specific_date"]:
+        raise ValueError(
+            "Please use a valid operational mode: full_record or specific_date)"
+        )
+
+    # Start Timer
+    start_time = datetime.datetime.now()
+
+    # Define Initial Variables
+    datum = noaapy.globals.DEFAULT_DATUM
+    timezone = noaapy.globals.DEFAULT_TIMEZONE
+    units = noaapy.globals.DEFAULT_UNITS
+    data_format = noaapy.globals.DEFAULT_DATA_FORMAT
+    gen_url = noaapy.globals.DEFAULT_API_URL
+    timeout = noaapy.globals.DEFAULT_TIMEOUT
+
+    # Check if stations are in inventory
+    logical_matrix = np.array([[s["id"] == id for id in id_list] for s in station_list])
+    max_logical = np.max(logical_matrix, axis=0)
+    valid_indices = np.argmax(logical_matrix, axis=0)
+
+    # Single out stations that were not found in StationList
+    not_found = [id_list[i] for i, val in enumerate(max_logical) if not val]
+
+    # Create valid station id list
+    id_list = [
+        station_list[valid_indices[i]]["id"] for i, val in enumerate(max_logical) if val
+    ]
+
+    # Initialize Counter
+    ctr = 0
+
+    # Initialize Results
+    s_data = []
+
+    # Download Data for Each Station
+    for i, station_id in enumerate(id_list):
+        print(f"------------------ {i + 1} / {len(id_list)} ---------------------")
+        for product in prod:
+            # Extract Station from Data Structure
+            station: dict = next(s for s in station_list if s["id"] == station_id)
+            s_data_entry = {
+                "id": station_id,
+                "name": station["name"],
+                "lon": station["lon"],
+                "lat": station["lat"],
+                "state": station["state"],
+            }
+
+            # Check WL Measurements Products Available
+            flag4, flag1, indx = noaapy.measurements_product_flags(station, product)
+
+            if flag4 == 1:
+                s_data_entry.update(
+                    {
+                        "WL_datum": "Not found",
+                        "TP_datum": "Not found",
+                        "WL_downloaded_product": "Not found",
+                        "TP_downloaded_product": "Not found",
+                        "record_length": "Not found",
+                        "WL": "Not found",
+                        "TP": "Not found",
+                    }
+                )
+                s_data.append(s_data_entry)
+                ctr += 1
+                continue
+
+            # Check if Date Range of Interest is Available
+            if operation == "specific_date":
+                indx, end_date, begin_date, dummy3 = noaapy.date_search(
+                    station, begin_date, end_date, indx
+                )
+                if not dummy3:
+                    station["start_date"][indx] = (
+                        f"{begin_date.strftime('%Y-%m-%d %H:%M:%S')} GMT"
+                    )
+                    station["end_date"][indx] = (
+                        f"{end_date.strftime('%Y-%m-%d %H:%M:%S')} GMT"
+                    )
+                else:
+                    s_data_entry.update(
+                        {
+                            "WL_datum": "Not found",
+                            "TP_datum": "Not found",
+                            "WL_downloaded_product": "Not found",
+                            "TP_downloaded_product": "Not found",
+                            "record_length": "Not found",
+                            "WL": "Not found",
+                            "TP": "Not found",
+                        }
+                    )
+                    s_data.append(s_data_entry)
+                    ctr += 1
+                    continue
+
+            # Divide Date Range in Allowed Segments
+            st_dates, end_dates, st_dates_p, end_dates_p = noaapy.download_segmentation(
+                station, flag1, indx
+            )
+
+            # Check Datum Availability
+            datum, datum_p = noaapy.datum_selector(station, requested_datum)
+
+            # Check Tidal Predictions Intervals
+            interval, _ = noaapy.prediction_interval_selector(
+                station, flag1, station["greatlakes"]
+            )
+
+            # Assign Info to Sdata
+            s_data_entry.update(
+                {
+                    "WL_datum": datum,
+                    "TP_datum": datum_p,
+                    "WL_downloaded_product": noaapy.globals.PRODUCT_LABELS[flag1],
+                    "TP_downloaded_product": interval,
+                    "record_length": station["record_length"][indx],
+                }
+            )
+
+            # NAVD88 Adjustment
+            if datum == "NAVD88":
+                datum = "NAVD"
+            if datum_p == "NAVD88":
+                datum_p = "NAVD"
+
+            # Build URL & Download Measured Data
+            s_data = _wl_download(
+                ctr,
+                s_data,
+                datum,
+                station_id,
+                timezone,
+                units,
+                data_format,
+                st_dates,
+                end_dates,
+                gen_url,
+                timeout,
+                flag1,
+            )
+
+            # Download Tidal Predictions
+            s_data = tidal_predictions_downloader(
+                ctr,
+                s_data,
+                datum_p,
+                station_id,
+                timezone,
+                units,
+                data_format,
+                interval,
+                st_dates_p,
+                end_dates_p,
+                gen_url,
+                timeout,
+                station["greatlakes"],
+                flag1,
+                station,
+            )
+
+            # Make Sure Time Vectors Are the Same Length
+            if station["greatlakes"] == 0:
+                s_data = vector_length_check(ctr, s_data, flag1, station["greatlakes"])
+
+            # Compute Total Record Length (Non NaN Data)
+            s_data = record_length_calc(ctr, s_data, flag1)
+
+            # Add DateRange
+            s_data_entry.update(
+                {
+                    "Beg": s_data[ctr]["WL"]["DateTime"][0].strftime("%Y-%m-%d %H:%M"),
+                    "End": s_data[ctr]["WL"]["DateTime"][-1].strftime("%Y-%m-%d %H:%M"),
+                }
+            )
+
+            # Increment Counter for Product Loop
+            ctr += 1
+
+    # End Timer
+    end_time = datetime.datetime.now()
+    run_time = end_time - start_time
+    print(f"Total Run Time: {run_time}")
+
+    return s_data, not_found
 
 
 def _download_csv_as_dataframe(
@@ -29,7 +225,7 @@ def wl_download(
     station: str,
     timezone: str,
     units: str,
-    fmt: str,  # 'format' is a Python builtin, so use fmt instead
+    fmt: str,
     stDates,
     endDates,
     gen_url: str,
@@ -86,63 +282,21 @@ def wl_download(
                 begin_str = segments[kk]  # 'yyyymmdd HH:MM'
                 end_str = end_segments[kk]
 
-                if flag1 in ("6", "6p"):
-                    # 6-minute WL measurements
-                    wl_api = (
-                        "/api/prod/datagetter?product=water_level"
-                        "&application=NOS.COOPS.TAC.WL"
-                        f"&begin_date={begin_str}"
-                        f"&end_date={end_str}"
-                        f"&datum={datum}"
-                        f"&station={station}"
-                        f"&time_zone={timezone}"
-                        f"&units={units}"
-                        f"&format={fmt}"
-                    )
+                product_param = noaapy.globals.PRODUCT_PARAM[flag1]
 
-                    url = gen_url + wl_api
-
-                    # Retry loop (as in MATLAB try/catch + while)
-                    wltable = None
-                    while wltable is None:
-                        try:
-                            wltable = _download_csv_as_dataframe(url, options)
-                        except Exception:
-                            time.sleep(3)
-
-                elif flag1 == "1":
-                    # 1-hour WL measurements
-                    wl_api = (
-                        "/api/prod/datagetter?product=hourly_height"
-                        "&application=NOS.COOPS.TAC.WL"
-                        f"&begin_date={begin_str}"
-                        f"&end_date={end_str}"
-                        f"&datum={datum}"
-                        f"&station={station}"
-                        f"&time_zone={timezone}"
-                        f"&units={units}"
-                        f"&format={fmt}"
-                    )
-                    url = gen_url + wl_api
-                    wltable = _download_csv_as_dataframe(url, options)
-
-                elif flag1 == "hilo":
-                    # High/low WL measurements
-                    wl_api = (
-                        "/api/prod/datagetter?product=high_low"
-                        "&application=NOS.COOPS.TAC.WL"
-                        f"&begin_date={begin_str}"
-                        f"&end_date={end_str}"
-                        f"&datum={datum}"
-                        f"&station={station}"
-                        f"&time_zone={timezone}"
-                        f"&units={units}"
-                        f"&format={fmt}"
-                    )
-                    url = gen_url + wl_api
-                    wltable = _download_csv_as_dataframe(url, options)
-
-                else:
+                wl_api = (
+                    f"/datagetter?product={product_param}"
+                    "&application=NOS.COOPS.TAC.WL"
+                    f"&begin_date={begin_str}"
+                    f"&end_date={end_str}"
+                    f"&datum={datum}"
+                    f"&station={station}"
+                    f"&time_zone={timezone}"
+                    f"&units={units}"
+                    f"&format={fmt}"
+                )
+                url = gen_url + wl_api
+                if flag1 not in noaapy.globals.PRODUCT_PARAMS:
                     raise ValueError(f"Unsupported flag1 for non-monthly data: {flag1}")
 
                 # ------------------------------------------------------------------
@@ -199,7 +353,7 @@ def wl_download(
             end_str = endDates[jj]
 
             wl_api = (
-                "/api/prod/datagetter?product=monthly_mean"
+                "/datagetter?product=monthly_mean"
                 "&application=NOS.COOPS.TAC.WL"
                 f"&begin_date={begin_str}"
                 f"&end_date={end_str}"

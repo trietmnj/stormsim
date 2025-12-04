@@ -6,24 +6,28 @@ import noaapy
 
 
 def download_segmentation(
-    station, flag1: bool, idx: int
+    station, intervalParam: str, idx: int
 ) -> Tuple[list, list, list, list]:
     """
     Downloads the segmentation date ranges for a given station based on the specified flag.
     Args:
         station (dict): The station data containing segmentation information.
-        flag1 (bool): A flag indicating the type of segmentation to retrieve.
-        indx (list): A list of indices to specify which segments to retrieve.
+        intervalParam: A flag indicating the type of segmentation to retrieve.
+        idx (list): A list of indices to specify which segments to retrieve.
     Returns:
         Tuple[list, list, list, list]: Four lists containing start and end dates for segments
                                         and predictions.
     """
-    if flag1 != "m":
-        st_dates, end_dates = noaapy.date.date_range_segmentation(station, flag1, idx)
+    if intervalParam not in noaapy.globals.PRODUCT_LABELS:
+        raise ValueError(
+            f"intervalParam={intervalParam} must be in {list(noaapy.globals.PRODUCT_LABELS.keys())}"
+        )
+
+    if intervalParam != "m":
+        st_dates, end_dates = noaapy.date.date_range_segmentation(
+            station, intervalParam, idx
+        )
     else:
-        print(type(idx))
-        print(type(idx[0]))
-        print(station)
         st_dates = station["start_date"][idx]
         end_dates = station["end_date"][idx]
         st_dates = [date[:19] for date in st_dates]

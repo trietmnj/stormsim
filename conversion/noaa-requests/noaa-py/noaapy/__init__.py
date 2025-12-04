@@ -3,8 +3,7 @@ from .datum_selector import datum_selector
 from .download_segmentation import download_segmentation
 from .prediction_interval_selector import prediction_interval_selector
 from .wl_measurements_product_selector_v2 import measurements_product_flags
-from .wl_download import wl_download
 from .gap_filler import gap_filler
-from .wl_downloader_v2 import wl_downloader_v2
+from .download import download
 from . import globals
 from . import date
