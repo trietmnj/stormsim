@@ -8,7 +8,7 @@ def measurements_product_flags(prod) -> Tuple[bool, bool, int]:
     """
     Given the station's list of available WL products and a product name,
     return:
-        flag2 : 0 if station has the product, 1 otherwise
+        is_product_available : 0 if station has the product, 1 otherwise
         interval_param : short code ('m', '1', '6', '6p', 'hilo')
         idxs  : list of indices where this product appears
     """

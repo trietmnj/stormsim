@@ -5,7 +5,6 @@ from typing import Any, Dict, List, Sequence, Tuple, Iterable
 import requests
 
 import pandas as pd
-import numpy as np
 
 import noaapy
 
@@ -21,7 +20,6 @@ def download(
 ):
     """Entry point to the download."""
     _validate_operation(operation)
-
     start_time = datetime.datetime.now()
 
     # Defaults from globals
@@ -38,28 +36,23 @@ def download(
     id_list, not_found = _filter_station_ids(id_list, station_lookup)
 
     # Results container
-    s_data: List[Dict[str, Any]] = []
+    data: List[Dict[str, Any]] = []
 
     # Loop over stations and products
-    for i, station_id in enumerate(id_list):
-        print(f"------------------ {i + 1} / {len(id_list)} ---------------------")
+    for _, station_id in enumerate(id_list):
         station = station_lookup[station_id]
-
         for product in prod:
             # Create base entry and append immediately so all helpers
             # can rely on its index.
             s_data_entry = _base_sdata_entry(station_id, station)
-            s_data.append(s_data_entry)
-            entry_idx = len(s_data) - 1
+            data.append(s_data_entry)
+            entry_idx = len(data) - 1
 
             # Check WL measurements products available
-            product_flag, interval_param, indx = (
+            is_product_available, interval_param, indx = (
                 noaapy.params.measurements_product_flags(product)
             )
-            # NOTE: depending on measurements_product_flags semantics,
-            # you may want `if not product_flag:` here instead.
-            if product_flag:
-                # Leave base "Not found" values as is and skip
+            if not is_product_available:
                 continue
 
             # For "specific_date", ensure requested date range is available
@@ -85,7 +78,7 @@ def download(
                 end_dates,
                 st_dates_p,
                 end_dates_p,
-            ) = noaapy.download_segmentation(station, interval_param, indx)
+            ) = noaapy.parse_dates(station, interval_param, indx)
 
             # Datum selection
             datum, datum_p = noaapy.datum_selector(station, requested_datum)
@@ -113,9 +106,9 @@ def download(
             tp_datum_for_api = datum_p.replace("NAVD88", "NAVD")
 
             # Download measured data
-            s_data = _wl_download(
+            data = _wl_download(
                 entry_idx,
-                s_data,
+                data,
                 wl_datum_for_api,
                 station_id,
                 timezone,
@@ -129,9 +122,9 @@ def download(
             )
 
             # Download tidal predictions
-            s_data = tidal_predictions_downloader(
+            data = tidal_predictions_downloader(
                 entry_idx,
-                s_data,
+                data,
                 tp_datum_for_api,
                 station_id,
                 timezone,
@@ -149,15 +142,15 @@ def download(
 
             # Great Lakes special handling
             if station["greatlakes"] == 0:
-                s_data = vector_length_check(
+                data = vector_length_check(
                     entry_idx,
-                    s_data,
+                    data,
                     interval_param,
                     station["greatlakes"],
                 )
 
             # Compute total record length (non-NaN data)
-            s_data = record_length_calc(entry_idx, s_data, interval_param)
+            data = record_length_calc(entry_idx, data, interval_param)
 
             # Add Begin / End timestamps to this entry
             _set_beg_end_from_wl_entry(s_data_entry)
@@ -166,7 +159,7 @@ def download(
     run_time = end_time - start_time
     print(f"Total Run Time: {run_time}")
 
-    return s_data, not_found
+    return data, not_found
 
 
 def _validate_operation(operation: str) -> None:
@@ -294,7 +287,6 @@ def _wl_download(
         data = _handle_monthly(
             data=data,
             query_params=query_params,
-            gen_url=gen_url,
             stDates=stDates,
             endDates=endDates,
             options=options,
@@ -398,12 +390,9 @@ def _handle_non_monthly(
 
     Lend = len(stDates)
     for jj in range(Lend):
-        # GAP FILLER (user-provided function)
-        data = gap_filler(data, stDates, endDates, flag1, jj)
-
+        data = noaapy.processing.fill_gaps(data, stDates, endDates, flag1, jj)
         segments = stDates[jj]
         end_segments = endDates[jj]
-
         for kk, (begin_str, end_str) in enumerate(zip(segments, end_segments)):
             query_param = {
                 "product": product,
@@ -416,13 +405,10 @@ def _handle_non_monthly(
                 "begin_str": begin_str,
                 "end_str": end_str,
             }
-
             url = _build_url(
                 query_param=query_param,
             )
-
             wltable = _download_wl_table(url, options)
-
             # Failsafe path
             if wltable.empty or wltable.shape[1] > 5:
                 wltable = noaapy.processing.synthesize_nan_series(
@@ -430,12 +416,10 @@ def _handle_non_monthly(
                 )
             else:
                 wltable = noaapy.processing.normalize_non_monthly_wl_table(wltable)
-
             print(
                 f"Station: {station} WL Measurements: {jj + 1}/{Lend} "
                 f"Segmentation: {kk + 1}/{len(segments)}"
             )
-
             data = pd.concat([data, wltable], ignore_index=True)
 
     return data

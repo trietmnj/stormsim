@@ -5,11 +5,11 @@ from typing import Tuple
 import noaapy
 
 
-def download_segmentation(
+def parse_dates(
     station, interval_param: str, idx: int
 ) -> Tuple[list, list, list, list]:
     """
-    Downloads the segmentation date ranges for a given station based on the specified flag.
+    Parse the segmentation date ranges for a given station based on the specified flag.
     Args:
         station (dict): The station data containing segmentation information.
         intervalParam: A flag indicating the type of segmentation to retrieve.
