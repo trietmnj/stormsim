@@ -10,7 +10,8 @@ import pandas as pd
 import noaapy
 
 
-class DownloadDataConfig(dataclass):
+@dataclass
+class DownloadDataConfig:
     station_ids: List[str]
     datum: str
     prod: List[str]

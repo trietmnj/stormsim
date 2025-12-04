@@ -9,7 +9,7 @@ import noaapy
 
 
 def main():
-    download_data_cfg = DownloadDataConfig(
+    download_data_cfg = noaapy.download.DownloadDataConfig(
         station_ids=["9414290"],
         datum="MSL",
         prod=["Verified Monthly Mean Water Level"],
