@@ -135,7 +135,7 @@ def download(
             )
 
             # Download tidal predictions
-            data = noaapy.download.tidal_predictions_downloader(
+            data = noaapy.download.download_tidal_predictions(
                 entry_idx,
                 data,
                 tp_datum_for_api,

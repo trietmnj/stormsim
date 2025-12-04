@@ -7,6 +7,113 @@ import pandas as pd
 
 
 # ---------------------------------------------------------------------
+# Main function
+# ---------------------------------------------------------------------
+def download_tidal_predictions(
+    ii: int,
+    Sdata: List[Dict[str, Any]],
+    datum_p: str,
+    station: str,
+    timezone: str,
+    units: str,
+    fmt: str,
+    interval: str,
+    stDatesp,
+    endDatesp,
+    gen_url: str,
+    timeout: int,
+    flag2: int,
+    flag1: str,
+    dStruct: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    """
+    Python translation of MATLAB tidal_predictions_downloader.m
+
+    Parameters
+    ----------
+    ii : int
+        Index into Sdata (0-based).
+    Sdata : list of dict
+        Sdata[ii]['TP'] will be set/updated by this function.
+    datum_p, station, timezone, units, fmt, interval, gen_url, timeout :
+        Same semantics as in MATLAB version (NOAA CO-OPS predictions API).
+    stDatesp, endDatesp :
+        Nested lists: stDatesp[jj][kk] and endDatesp[jj][kk] are 'yyyymmdd HH:MM'.
+    flag2 : int
+        Typically station["greatlakes"] (0 or 1).
+    flag1 : str
+        Interval parameter / product flag (not heavily used here).
+    dStruct : dict
+        Station metadata structure (must contain 'datums_predictions').
+
+    Returns
+    -------
+    Sdata : list of dict
+        Updated in-place, but also returned for convenience.
+    """
+    s_entry = Sdata[ii]
+    options = {"timeout": timeout}
+
+    datap = pd.DataFrame(columns=["DateTime", "Prediction"])
+    last_predtable: pd.DataFrame | None = None
+
+    # ------------------------------------------------------------------
+    # DOWNLOAD TIDAL PREDICTIONS
+    # ------------------------------------------------------------------
+    if _should_download_predictions(flag2, dStruct, s_entry):
+        # stDatesp[jj], endDatesp[jj] are lists of strings
+        for jj, (st_row, end_row) in enumerate(zip(stDatesp, endDatesp), start=1):
+            for kk, (begin_str, end_str) in enumerate(zip(st_row, end_row), start=1):
+                url = _build_predictions_url(
+                    station=station,
+                    datum_p=datum_p,
+                    timezone=timezone,
+                    units=units,
+                    fmt=fmt,
+                    gen_url=gen_url,
+                    begin_str=begin_str,
+                    end_str=end_str,
+                    interval=interval,
+                    flag1=flag1,
+                )
+
+                predtable = _retry_download_predictions(url, options)
+                last_predtable = predtable
+
+                datap = _append_if_valid(datap, predtable)
+
+                print(
+                    f"Station: {station} WL Preds: {jj}/{len(stDatesp)} "
+                    f"Segmentation: {kk}/{len(st_row)}"
+                )
+
+        Sdata[ii]["TP"] = _finalize_tp_from_chunks(datap, last_predtable)
+    else:
+        # No tidal prediction
+        Sdata[ii]["TP"] = "Not Found"
+
+    # ------------------------------------------------------------------
+    # CREATE A MONTHLY SIGNAL FROM PREDICTIONS (ALIGN TO WL)
+    # ------------------------------------------------------------------
+    if flag2 == 0:
+        try:
+            wl_df = Sdata[ii]["WL"]
+            tp_val = Sdata[ii]["TP"]
+
+            if not isinstance(wl_df, pd.DataFrame) or not isinstance(
+                tp_val, pd.DataFrame
+            ):
+                raise ValueError("WL or TP is not a DataFrame")
+
+            Sdata[ii]["TP"] = _align_predictions_to_measurements(wl_df, tp_val)
+
+        except Exception:
+            Sdata[ii]["TP"] = "Not Found"
+
+    return Sdata
+
+
+# ---------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------
 def _should_download_predictions(
@@ -215,110 +322,3 @@ def _align_predictions_to_measurements(
         raise ValueError("No overlapping DateTime values between WL and TP")
 
     return merged[["DateTime", "Prediction"]].reset_index(drop=True)
-
-
-# ---------------------------------------------------------------------
-# Main function
-# ---------------------------------------------------------------------
-def tidal_predictions_downloader(
-    ii: int,
-    Sdata: List[Dict[str, Any]],
-    datum_p: str,
-    station: str,
-    timezone: str,
-    units: str,
-    fmt: str,
-    interval: str,
-    stDatesp,
-    endDatesp,
-    gen_url: str,
-    timeout: int,
-    flag2: int,
-    flag1: str,
-    dStruct: Dict[str, Any],
-) -> List[Dict[str, Any]]:
-    """
-    Python translation of MATLAB tidal_predictions_downloader.m
-
-    Parameters
-    ----------
-    ii : int
-        Index into Sdata (0-based).
-    Sdata : list of dict
-        Sdata[ii]['TP'] will be set/updated by this function.
-    datum_p, station, timezone, units, fmt, interval, gen_url, timeout :
-        Same semantics as in MATLAB version (NOAA CO-OPS predictions API).
-    stDatesp, endDatesp :
-        Nested lists: stDatesp[jj][kk] and endDatesp[jj][kk] are 'yyyymmdd HH:MM'.
-    flag2 : int
-        Typically station["greatlakes"] (0 or 1).
-    flag1 : str
-        Interval parameter / product flag (not heavily used here).
-    dStruct : dict
-        Station metadata structure (must contain 'datums_predictions').
-
-    Returns
-    -------
-    Sdata : list of dict
-        Updated in-place, but also returned for convenience.
-    """
-    s_entry = Sdata[ii]
-    options = {"timeout": timeout}
-
-    datap = pd.DataFrame(columns=["DateTime", "Prediction"])
-    last_predtable: pd.DataFrame | None = None
-
-    # ------------------------------------------------------------------
-    # DOWNLOAD TIDAL PREDICTIONS
-    # ------------------------------------------------------------------
-    if _should_download_predictions(flag2, dStruct, s_entry):
-        # stDatesp[jj], endDatesp[jj] are lists of strings
-        for jj, (st_row, end_row) in enumerate(zip(stDatesp, endDatesp), start=1):
-            for kk, (begin_str, end_str) in enumerate(zip(st_row, end_row), start=1):
-                url = _build_predictions_url(
-                    station=station,
-                    datum_p=datum_p,
-                    timezone=timezone,
-                    units=units,
-                    fmt=fmt,
-                    gen_url=gen_url,
-                    begin_str=begin_str,
-                    end_str=end_str,
-                    interval=interval,
-                    flag1=flag1,
-                )
-
-                predtable = _retry_download_predictions(url, options)
-                last_predtable = predtable
-
-                datap = _append_if_valid(datap, predtable)
-
-                print(
-                    f"Station: {station} WL Preds: {jj}/{len(stDatesp)} "
-                    f"Segmentation: {kk}/{len(st_row)}"
-                )
-
-        Sdata[ii]["TP"] = _finalize_tp_from_chunks(datap, last_predtable)
-    else:
-        # No tidal prediction
-        Sdata[ii]["TP"] = "Not Found"
-
-    # ------------------------------------------------------------------
-    # CREATE A MONTHLY SIGNAL FROM PREDICTIONS (ALIGN TO WL)
-    # ------------------------------------------------------------------
-    if flag2 == 0:
-        try:
-            wl_df = Sdata[ii]["WL"]
-            tp_val = Sdata[ii]["TP"]
-
-            if not isinstance(wl_df, pd.DataFrame) or not isinstance(
-                tp_val, pd.DataFrame
-            ):
-                raise ValueError("WL or TP is not a DataFrame")
-
-            Sdata[ii]["TP"] = _align_predictions_to_measurements(wl_df, tp_val)
-
-        except Exception:
-            Sdata[ii]["TP"] = "Not Found"
-
-    return Sdata
