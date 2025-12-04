@@ -1,6 +1,6 @@
 # noaa-requests/noaa-py/download.py
 import datetime
-from typing import Any, Dict, List, Sequence, Tuple, Iterable, Optional
+from typing import Any, Dict, List, Tuple, Iterable, Optional
 from dataclasses import dataclass
 
 import pandas as pd
@@ -155,7 +155,7 @@ def download(
 
             # Great Lakes special handling
             if station["greatlakes"] == 0:
-                data = vector_length_check(
+                data = noaapy.processing.vector_length_check(
                     entry_idx,
                     data,
                     interval_param,
@@ -163,7 +163,7 @@ def download(
                 )
 
             # Compute total record length (non-NaN data)
-            data = record_length_calc(entry_idx, data, interval_param)
+            data = noaapy.processing.record_length_calc(entry_idx, data, interval_param)
 
             # Add Begin / End timestamps to this entry
             _set_beg_end_from_wl_entry(s_data_entry)
