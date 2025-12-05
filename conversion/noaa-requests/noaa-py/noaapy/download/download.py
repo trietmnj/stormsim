@@ -12,10 +12,10 @@ import noaapy
 class DownloadDataConfig:
     station_ids: List[str]
     datum: str
-    prod: List[str]
-    op_mode: str
-    d_beg: Optional[str] = None
-    d_end: Optional[str] = None
+    products: List[str]
+    operation_mode: str
+    begin_date: Optional[str] = None
+    end_date: Optional[str] = None
 
 
 def download(
@@ -24,23 +24,30 @@ def download(
 ):
     """Entry point to the download."""
     # station_ids = download_data_cfg.station_ids
-    requested_datum = download_data_cfg.datum
-    prod = download_data_cfg.prod
-    operation = download_data_cfg.op_mode
-    begin_date = download_data_cfg.d_beg
-    end_date = download_data_cfg.d_end
+    # requested_datum = download_data_cfg.datum
+    # prod = download_data_cfg.prod
+    # operation = download_data_cfg.op_mode
+    # begin_date = download_data_cfg.d_beg
+    # end_date = download_data_cfg.d_end
 
-    _validate_operation(operation)
+    _validate_operation(download_data_cfg.operation_mode)
     start_time = datetime.datetime.now()
 
+    default_cfg = DownloadDataConfig(
+        station_ids=[],
+        datum=noaapy.globals.DEFAULT_DATUM,
+        products=noaapy.globals.DEFAULT_PRODUCTS,
+        operation_mode="full_record",
+    )
+
     # Defaults from globals
-    datum = noaapy.globals.DEFAULT_DATUM
-    timezone = noaapy.globals.DEFAULT_TIMEZONE
-    units = noaapy.globals.DEFAULT_UNITS
-    data_format = noaapy.globals.DEFAULT_DATA_FORMAT
-    gen_url = noaapy.globals.BASE_API_URL
-    timeout = noaapy.globals.DEFAULT_TIMEOUT
-    request_options = {"timeout": timeout}
+    # datum = noaapy.globals.DEFAULT_DATUM
+    # timezone = noaapy.globals.DEFAULT_TIMEZONE
+    # units = noaapy.globals.DEFAULT_UNITS
+    # data_format = noaapy.globals.DEFAULT_DATA_FORMAT
+    # gen_url = noaapy.globals.BASE_API_URL
+    # timeout = noaapy.globals.DEFAULT_TIMEOUT
+    # request_options = {"timeout": timeout}
 
     # Station lookup and validity check
     station_lookup = _build_station_lookup(station_list)
@@ -54,7 +61,7 @@ def download(
     # Loop over stations and products
     for _, station_id in enumerate(station_ids):
         station = station_lookup[station_id]
-        for product in prod:
+        for product in download_data_cfg.products:
             # Create base entry and append immediately so all helpers
             # can rely on its index.
             s_data_entry = _base_data_entry(station_id, station)
@@ -62,26 +69,29 @@ def download(
             entry_idx = len(data) - 1
 
             # Check WL measurements products available
-            is_product_available, interval_param, indx = (
+            is_product_available, interval_param, idx = (
                 noaapy.params.measurements_product_flags(product)
             )
             if not is_product_available:
                 continue
 
             # For "specific_date", ensure requested date range is available
-            if operation == "specific_date":
-                indx, end_date, begin_date, date_ok = noaapy.date_search(
-                    station, begin_date, end_date, indx
+            if download_data_cfg.operation_mode == "specific_date":
+                idx, end_date, begin_date, date_ok = noaapy.dates.date_search(
+                    station,
+                    download_data_cfg.begin_date,
+                    download_data_cfg.end_date,
+                    idx,
                 )
                 if not date_ok:
                     # Leave base "Not found" values and skip
                     continue
 
                 # Update station record dates if needed
-                station["start_date"][indx] = (
+                station["start_date"][idx] = (
                     f"{begin_date.strftime('%Y-%m-%d %H:%M:%S')} GMT"
                 )
-                station["end_date"][indx] = (
+                station["end_date"][idx] = (
                     f"{end_date.strftime('%Y-%m-%d %H:%M:%S')} GMT"
                 )
 
@@ -91,13 +101,15 @@ def download(
                 end_dates,
                 st_dates_p,
                 end_dates_p,
-            ) = noaapy.parse_dates(station, interval_param, indx)
+            ) = noaapy.dates.parse_dates(station, interval_param, idx)
 
             # Datum selection
-            datum, datum_p = noaapy.datum_selector(station, requested_datum)
+            datum, datum_p = noaapy.params.datum_selector(
+                station, download_data_cfg.datum
+            )
 
             # Tidal prediction interval
-            interval, _ = noaapy.prediction_interval_selector(
+            interval, _ = noaapy.params.prediction_interval_selector(
                 station, interval_param, station["greatlakes"]
             )
 
@@ -110,7 +122,7 @@ def download(
                         interval_param
                     ],
                     "TP_downloaded_product": interval,
-                    "record_length": station["record_length"][indx],
+                    "record_length": station["record_length"][idx],
                 }
             )
 
