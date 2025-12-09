@@ -5,6 +5,12 @@ DEFAULT_TIMEZONE = "GMT"  # Preferred Time Zone for Data Download
 DEFAULT_UNITS = "metric"  # Preferred Units for Data Download
 DEFAULT_DATA_FORMAT = "csv"  # Download Data Format
 DEFAULT_TIMEOUT = 800
+DEFAULT_PRODUCTS = [
+    "Verified Monthly Mean Water Level",
+    "Verified Hourly Height Water Level",
+    "Verified 6-Minute Water Level",
+]
+
 
 INTERVAL_NAME_TO_PARAM = {
     "Verified Monthly Mean Water Level": "m",
