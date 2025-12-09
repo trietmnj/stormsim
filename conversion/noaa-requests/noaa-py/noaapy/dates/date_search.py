@@ -1,64 +1,54 @@
 import datetime
-from typing import List
+from typing import Dict, List, Tuple
 
 
-def date_search(d_struct, d_beg, d_end, indx):
+def date_search(
+    d_struct: Dict[str, List[str]],
+    d_beg: datetime.datetime,
+    d_end: datetime.datetime,
+    indx: List[int],
+) -> Tuple[List[int], datetime.datetime, datetime.datetime, bool]:
     """
-    Parameters
-    ----------
-    d_struct : dict
-        Must contain:
-            d_struct["start_date"] : list of 'yyyy-mm-dd HH:MM:SS' strings
-            d_struct["end_date"]   : list of 'yyyy-mm-dd HH:MM:SS' strings
-    d_beg : datetime.datetime
-        Desired start date.
-    d_end : datetime.datetime
-        Desired end date.
-    indx : list of int
-        Indices into the above arrays (0-based in Python).
-    Returns
-    -------
-    indx : list of int
-        Updated indices into d_struct arrays (0-based in Python).
-    d_end : datetime.datetime
-        Possibly adjusted desired end date.
-    d_beg : datetime.datetime
-        Possibly adjusted desired start date.
-    invalid_flag : bool
-        True if no valid date range found.
+    d_struct["start_date"], d_struct["end_date"]:
+        lists of 'yyyy-mm-dd HH:MM:SS' strings
+    indx:
+        list of indices into those lists (0-based)
     """
     invalid_flag = False
 
-    range_start = d_struct["start_date"][indx]
-    range_end = d_struct["end_date"][indx]
-
-    range_start = [
-        datetime.datetime.strptime(item[:19], "%Y-%m-%d %H:%M:%S")
-        for item in range_start
+    # Parse only the ranges we care about (those in indx)
+    starts = [
+        datetime.datetime.strptime(d_struct["start_date"][i][:19], "%Y-%m-%d %H:%M:%S")
+        for i in indx
     ]
-    range_end = [
-        datetime.datetime.strptime(item[:19], "%Y-%m-%d %H:%M:%S") for item in range_end
-    ]
-
-    u_bound_chk_dummy = [
-        d_beg >= start and d_beg <= end for start, end in zip(range_start, range_end)
-    ]
-    l_bound_chk_dummy = [
-        d_end >= start and d_end <= end for start, end in zip(range_start, range_end)
+    ends = [
+        datetime.datetime.strptime(d_struct["end_date"][i][:19], "%Y-%m-%d %H:%M:%S")
+        for i in indx
     ]
 
-    dummy_indx = [u + l for u, l in zip(u_bound_chk_dummy, l_bound_chk_dummy)]
+    # Flags for whether d_beg / d_end fall inside each interval
+    beg_inside = [start <= d_beg <= end for start, end in zip(starts, ends)]
+    end_inside = [start <= d_end <= end for start, end in zip(starts, ends)]
 
-    if all(item == 0 for item in dummy_indx):
+    # 0 = neither inside, 1 = one inside, 2 = both inside
+    overlap_score = [int(b) + int(e) for b, e in zip(beg_inside, end_inside)]
+
+    # Case 1: no overlap at all
+    if all(score == 0 for score in overlap_score):
         invalid_flag = True
-    elif any(item == 2 for item in dummy_indx):
-        indx = [i for i, value in enumerate(dummy_indx) if value == 2]
-    elif any(item == 1 for item in dummy_indx):
-        if all(u == 0 for u in u_bound_chk_dummy):
-            nearest_start = min(range_start, key=lambda x: abs(x - d_beg))
-            d_beg = nearest_start
-        elif all(l == 0 for l in l_bound_chk_dummy):
-            nearest_end = min(range_end, key=lambda x: abs(x - d_end))
-            d_end = nearest_end
+
+    # Case 2: some interval fully contains [d_beg, d_end]
+    elif any(score == 2 for score in overlap_score):
+        # choose all such indices, mapped back to original d_struct indices
+        indx = [indx[i] for i, score in enumerate(overlap_score) if score == 2]
+
+    # Case 3: partial overlap – adjust d_beg or d_end to nearest boundary
+    elif any(score == 1 for score in overlap_score):
+        # if start is outside all intervals, snap d_beg to nearest start
+        if not any(beg_inside):
+            d_beg = min(starts, key=lambda t: abs(t - d_beg))
+        # if end is outside all intervals, snap d_end to nearest end
+        elif not any(end_inside):
+            d_end = min(ends, key=lambda t: abs(t - d_end))
 
     return indx, d_end, d_beg, invalid_flag

@@ -50,17 +50,17 @@ def download(
     # request_options = {"timeout": timeout}
 
     # Station lookup and validity check
-    station_lookup = _build_station_lookup(station_list)
+    stations = _build_station_lookup(station_list)
     station_ids, not_found = _filter_station_ids(
-        download_data_cfg.station_ids, station_lookup
+        download_data_cfg.station_ids, stations
     )
 
     # Results container
     data: List[Dict[str, Any]] = []
 
     # Loop over stations and products
-    for _, station_id in enumerate(station_ids):
-        station = station_lookup[station_id]
+    for station_id in station_ids:
+        station = stations[station_id]
         for product in download_data_cfg.products:
             # Create base entry and append immediately so all helpers
             # can rely on its index.
@@ -68,24 +68,18 @@ def download(
             data.append(s_data_entry)
             entry_idx = len(data) - 1
 
-            # Check WL measurements products available
-            is_product_available, interval_param, idx = (
-                noaapy.params.measurements_product_flags(product)
-            )
-            if not is_product_available:
+            interval_param: str = noaapy.globals.INTERVAL_NAME_TO_PARAM[product]
+            if product not in noaapy.globals.INTERVAL_NAME_TO_PARAM:
                 continue
 
             # For "specific_date", ensure requested date range is available
             if download_data_cfg.operation_mode == "specific_date":
-                idx, end_date, begin_date, date_ok = noaapy.dates.date_search(
+                idx, end_date, begin_date = noaapy.dates.date_search(
                     station,
                     download_data_cfg.begin_date,
                     download_data_cfg.end_date,
                     idx,
                 )
-                if not date_ok:
-                    # Leave base "Not found" values and skip
-                    continue
 
                 # Update station record dates if needed
                 station["start_date"][idx] = (
@@ -95,13 +89,7 @@ def download(
                     f"{end_date.strftime('%Y-%m-%d %H:%M:%S')} GMT"
                 )
 
-            # Divide date range into allowed segments
-            (
-                st_dates,
-                end_dates,
-                st_dates_p,
-                end_dates_p,
-            ) = noaapy.dates.parse_dates(station, interval_param, idx)
+            date_ranges = noaapy.dates.parse_dates(station, interval_param, idx)
 
             # Datum selection
             datum, datum_p = noaapy.params.datum_selector(
@@ -130,7 +118,7 @@ def download(
             wl_datum_for_api = datum.replace("NAVD88", "NAVD")
             tp_datum_for_api = datum_p.replace("NAVD88", "NAVD")
 
-            # Download measured data
+            # Download water levels
             data = noaapy.download.download_wl(
                 entry_idx,
                 data,

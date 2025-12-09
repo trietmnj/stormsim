@@ -41,15 +41,11 @@ def parse_dates(station, interval_param: str, idx: int) -> DateRange:
         start_dates = [date[:19] for date in start_dates]
         end_dates = [date[:19] for date in end_dates]
         start_dates = [
-            datetime.datetime.strptime(date, "%Y-%m-%d %H:%M:%S").strftime(
-                "%Y%m%d %H:%M"
-            )
+            datetime.strptime(date, "%Y-%m-%d %H:%M:%S").strftime("%Y%m%d %H:%M")
             for date in start_dates
         ]
         end_dates = [
-            datetime.datetime.strptime(date, "%Y-%m-%d %H:%M:%S").strftime(
-                "%Y%m%d %H:%M"
-            )
+            datetime.strptime(date, "%Y-%m-%d %H:%M:%S").strftime("%Y%m%d %H:%M")
             for date in end_dates
         ]
 
