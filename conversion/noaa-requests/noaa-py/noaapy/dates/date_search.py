@@ -2,12 +2,14 @@
 import datetime
 from typing import Dict, List, Tuple
 
+from .dates import DateRange
+
 
 def date_search(
-    d_struct: Dict[str, List[str]],
+    dates: DateRange,
     d_beg: datetime.datetime,
     d_end: datetime.datetime,
-    indx: List[int],
+    idx: List[int],
 ) -> Tuple[List[int], datetime.datetime, datetime.datetime, bool]:
     """
     d_struct["start_date"], d_struct["end_date"]:
@@ -19,12 +21,12 @@ def date_search(
 
     # Parse only the ranges we care about (those in indx)
     starts = [
-        datetime.datetime.strptime(d_struct["start_date"][i][:19], "%Y-%m-%d %H:%M:%S")
-        for i in indx
+        datetime.datetime.strptime(dates["start_date"][i][:19], "%Y-%m-%d %H:%M:%S")
+        for i in idx
     ]
     ends = [
-        datetime.datetime.strptime(d_struct["end_date"][i][:19], "%Y-%m-%d %H:%M:%S")
-        for i in indx
+        datetime.datetime.strptime(dates["end_date"][i][:19], "%Y-%m-%d %H:%M:%S")
+        for i in idx
     ]
 
     # Flags for whether d_beg / d_end fall inside each interval
@@ -41,7 +43,7 @@ def date_search(
     # Case 2: some interval fully contains [d_beg, d_end]
     elif any(score == 2 for score in overlap_score):
         # choose all such indices, mapped back to original d_struct indices
-        indx = [indx[i] for i, score in enumerate(overlap_score) if score == 2]
+        idx = [idx[i] for i, score in enumerate(overlap_score) if score == 2]
 
     # Case 3: partial overlap – adjust d_beg or d_end to nearest boundary
     elif any(score == 1 for score in overlap_score):
@@ -52,4 +54,4 @@ def date_search(
         elif not any(end_inside):
             d_end = min(ends, key=lambda t: abs(t - d_end))
 
-    return indx, d_end, d_beg, invalid_flag
+    return idx, d_end, d_beg, invalid_flag

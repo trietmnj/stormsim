@@ -12,6 +12,79 @@ BASE_STATION_URL = "https://tidesandcurrents.noaa.gov/mdapi/latest/webapi/statio
 HIST_URL = BASE_STATION_URL + "?type=historicwl"
 ACTIVE_URL = BASE_STATION_URL + "?type=waterlevels"
 
+##### station_list example
+# {
+#     "count": 301,
+#     "units": null,
+#     "stations": [
+#         {
+#             "tidal": true,
+#             "greatlakes": false,
+#             "shefcode": "NWWH1",
+#             "details": {
+#                 "self": "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/1611400/details.json"
+#             },
+#             "sensors": {
+#                 "self": "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/1611400/sensors.json"
+#             },
+#             "floodlevels": {
+#                 "self": "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/1611400/floodlevels.json"
+#             },
+#             "datums": {
+#                 "self": "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/1611400/datums.json"
+#             },
+#             "supersededdatums": {
+#                 "self": "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/1611400/supersededdatums.json"
+#             },
+#             "harmonicConstituents": {
+#                 "self": "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/1611400/harcon.json"
+#             },
+#             "benchmarks": {
+#                 "self": "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/1611400/benchmarks.json"
+#             },
+#             "tidePredOffsets": {
+#                 "self": "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/1611400/tidepredoffsets.json"
+#             },
+#             "ofsMapOffsets": {
+#                 "self": "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/1611400/ofsmapoffsets.json"
+#             },
+#             "state": "HI",
+#             "timezone": "HAST",
+#             "timezonecorr": -10,
+#             "observedst": false,
+#             "stormsurge": false,
+#             "nearby": {
+#                 "self": "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/1611400/nearby.json"
+#             },
+#             "forecast": false,
+#             "outlook": true,
+#             "HTFhistorical": true,
+#             "HTFmonthly": true,
+#             "nonNavigational": false,
+#             "id": "1611400",
+#             "name": "Nawiliwili",
+#             "lat": 21.9544,
+#             "lng": -159.3561,
+#             "affiliations": "NWLON",
+#             "portscode": null,
+#             "products": {
+#                 "self": "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/1611400/products.json"
+#             },
+#             "disclaimers": {
+#                 "self": "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/1611400/disclaimers.json"
+#             },
+#             "notices": {
+#                 "self": "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/1611400/notices.json"
+#             },
+#             "self": "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/1611400.json",
+#             "expand": "details,sensors,floodlevels,datums,harcon,tidepredoffsets,ofsmapoffsets,products,disclaimers,notices",
+#             "tideType": "Mixed",
+#         },
+#         ...,
+#     ],
+# }
+#
+
 
 @dataclass
 class StationListBuildConfig:

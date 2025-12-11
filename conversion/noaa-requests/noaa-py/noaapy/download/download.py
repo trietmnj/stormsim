@@ -31,13 +31,6 @@ def download(
 
     start_time = datetime.datetime.now()
 
-    default_cfg = DownloadDataConfig(
-        station_ids=[],
-        datum=noaapy.globals.DEFAULT_DATUM,
-        products=noaapy.globals.DEFAULT_PRODUCTS,
-        operation_mode="full_record",
-    )
-
     # Defaults from globals
     # datum = noaapy.globals.DEFAULT_DATUM
     # timezone = noaapy.globals.DEFAULT_TIMEZONE
@@ -70,8 +63,11 @@ def download(
             if product not in noaapy.globals.INTERVAL_NAME_TO_PARAM:
                 continue
 
-            # use data range rather than full record
+            # download based
             if download_data_cfg.start_date and download_data_cfg.end_date:
+                print(
+                    f"Download specific date range for station {station_id} and product {product}. From {download_data_cfg.start_date} to {download_data_cfg.end_date}"
+                )
                 # For "specific_date", ensure requested date range is available
                 idx, end_date, begin_date = noaapy.dates.date_search(
                     station,
@@ -87,11 +83,13 @@ def download(
                 station["end_date"][idx] = (
                     f"{end_date.strftime('%Y-%m-%d %H:%M:%S')} GMT"
                 )
+            else:
+                print(
+                    f"Downloading full record for station '{station_id}' and product '{product}'"
+                )
 
-            # Datum selection
-            datum, datum_p = noaapy.params.datum_selector(
-                station, download_data_cfg.datum
-            )
+            # datums = noaapy.download.queries.get_available_datums("9414290")
+            datum, datum_p = noaapy.params.get_datum(station, download_data_cfg.datum)
 
             # Tidal prediction interval
             interval, _ = noaapy.params.prediction_interval_selector(
