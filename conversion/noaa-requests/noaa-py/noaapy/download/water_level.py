@@ -1,8 +1,10 @@
+# conversion/noaa-requests/noaa-py/noaapy/download/water_level.py
 from typing import Any, Dict, List, Tuple
 import pandas as pd
-import noaapy
 import requests
 from io import StringIO
+
+import noaapy
 
 
 def download_wl(
@@ -11,9 +13,7 @@ def download_wl(
     timezone: str,
     units: str,
     fmt: str,
-    dates: noaapy.dates.DateRanges,
-    stDates,
-    endDates,
+    dates: noaapy.dates.DateRange,
     gen_url: str,
     interval: str,
     options: Dict[str, Any] | None = None,
@@ -25,6 +25,9 @@ def download_wl(
         "units": units,
         "fmt": fmt,
     }
+
+    stDates = dates.starts
+    endDates = dates.ends
 
     # --- configure by flag1 ---
     if interval == "m":

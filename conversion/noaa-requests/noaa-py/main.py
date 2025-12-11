@@ -1,7 +1,4 @@
-# noaa-requests/noaa-py/main.py
-from dataclasses import dataclass
-from typing import List, Optional
-
+# conversion/noaa-requests/noaa-py/main.py
 import noaapy
 
 # api docs
@@ -20,8 +17,7 @@ def main():
         station_ids=["9414290"],
         datum="MSL",
         products=["Verified Monthly Mean Water Level"],
-        operation_mode="full_record",  # Full record
-        begin_date=None,  # Not used in full record mode
+        start_date=None,  # Not used in full record mode
         end_date=None,  # Not used in full record mode
     )
     data, not_found = noaapy.download.download(

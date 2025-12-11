@@ -1,4 +1,4 @@
-# noaa-requests/noaa-py/noaapy/globals.py
+# conversion/noaa-requests/noaa-py/noaapy/globals.py
 BASE_API_URL = "https://api.tidesandcurrents.noaa.gov/api/prod"  # NOAA CO-OPS URL
 DEFAULT_DATUM = "MSL"  # Preferred Datum for Data Download
 DEFAULT_TIMEZONE = "GMT"  # Preferred Time Zone for Data Download
@@ -22,8 +22,8 @@ INTERVAL_NAME_TO_PARAM = {
 
 PRODUCT_LABELS = {
     "6": "6 minutes",
-    "1": "hourly",
     "6p": "6 minutes preliminary",
+    "1": "hourly",
     "hilo": "High/Low",
     "m": "monthly",
 }

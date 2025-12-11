@@ -13,8 +13,7 @@ class DownloadDataConfig:
     station_ids: List[str]
     datum: str
     products: List[str]
-    operation_mode: str
-    begin_date: Optional[str] = None
+    start_date: Optional[str] = None
     end_date: Optional[str] = None
 
 
@@ -30,7 +29,6 @@ def download(
     # begin_date = download_data_cfg.d_beg
     # end_date = download_data_cfg.d_end
 
-    _validate_operation(download_data_cfg.operation_mode)
     start_time = datetime.datetime.now()
 
     default_cfg = DownloadDataConfig(
@@ -72,11 +70,12 @@ def download(
             if product not in noaapy.globals.INTERVAL_NAME_TO_PARAM:
                 continue
 
-            # For "specific_date", ensure requested date range is available
-            if download_data_cfg.operation_mode == "specific_date":
+            # use data range rather than full record
+            if download_data_cfg.start_date and download_data_cfg.end_date:
+                # For "specific_date", ensure requested date range is available
                 idx, end_date, begin_date = noaapy.dates.date_search(
                     station,
-                    download_data_cfg.begin_date,
+                    download_data_cfg.start_date,
                     download_data_cfg.end_date,
                     idx,
                 )
@@ -88,8 +87,6 @@ def download(
                 station["end_date"][idx] = (
                     f"{end_date.strftime('%Y-%m-%d %H:%M:%S')} GMT"
                 )
-
-            date_ranges = noaapy.dates.parse_dates(station, interval_param, idx)
 
             # Datum selection
             datum, datum_p = noaapy.params.datum_selector(
@@ -173,13 +170,6 @@ def download(
     print(f"Total Run Time: {run_time}")
 
     return data, not_found
-
-
-def _validate_operation(operation: str) -> None:
-    if operation not in ("full_record", "specific_date"):
-        raise ValueError(
-            "Please use a valid operational mode: full_record or specific_date"
-        )
 
 
 def _build_station_lookup(
