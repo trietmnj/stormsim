@@ -61,8 +61,7 @@ def download(
                 print(
                     f"Download specific date range for station {station_id} and product {product}. From {download_request_cfg.start_date} to {download_request_cfg.end_date}"
                 )
-                # For "specific_date", ensure requested date range is available
-                idx, end_date, begin_date = noaapy.dates.date_search(
+                idx, end_date, begin_date = noaapy.dates.get_valid_station_interval(
                     station,
                     download_request_cfg.date_range.left,  # start
                     download_request_cfg.date_range.right,  # end

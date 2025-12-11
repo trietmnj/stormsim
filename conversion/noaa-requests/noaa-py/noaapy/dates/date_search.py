@@ -5,13 +5,14 @@ from typing import Dict, List, Tuple
 from .dates import DateRange
 
 
-def date_search(
+def get_valid_station_interval(
     dates: DateRange,
     d_beg: datetime.datetime,
     d_end: datetime.datetime,
     idx: List[int],
 ) -> Tuple[List[int], datetime.datetime, datetime.datetime, bool]:
     """
+    Get valid date range for station within the data request date range
     d_struct["start_date"], d_struct["end_date"]:
         lists of 'yyyy-mm-dd HH:MM:SS' strings
     indx:
