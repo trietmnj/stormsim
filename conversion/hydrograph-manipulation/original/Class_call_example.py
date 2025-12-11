@@ -1,6 +1,7 @@
-from .HydroManipulator import HydroManipulator as hm
+from HydroManipulator import HydroManipulator as hm
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
 
 # Instantiate Class
 obj = hm()
@@ -19,13 +20,11 @@ data_headers = [
     "sim_year",
 ]
 slr = 1.5
-
 # Parse LC Data
 lc_data = obj.parse_lc(lc_file, data_headers)
 # Pull First Timestep For Each Event In LC
 events = lc_data[lc_data["timestep"] == 0]
 # Create Tidal Signal For Each Event (Tidal Predictions)
-
 row_ctr = np.array(0)  # Initialize Row Counter
 for ii in range(0, events.shape[0]):
     # Pull From NOAA API , Assumes Data Is Available
@@ -53,3 +52,40 @@ for ii in range(0, events.shape[0]):
 surge_w_tides = obj.add_tides(lc_data["surge"].values, tide_df["Prediction"].values)
 # Apply SLR
 surge_w_slr = obj.add_slr(lc_data["surge"].values, slr)
+
+
+#######
+# Create the plot
+plt.figure(figsize=(8, 5))
+# Plot the first line (Red)
+plt.plot(
+    lc_data["timestep"].values[0:72],
+    lc_data["surge"].values[0:72],
+    color="red",
+    label="Surge",
+)
+# Plot the second line (Blue)
+plt.plot(
+    lc_data["timestep"].values[0:72],
+    tide_df["Prediction"].values[0:72],
+    color="blue",
+    label="Tides",
+)
+plt.plot(
+    lc_data["timestep"].values[0:72],
+    surge_w_tides[0:72],
+    color="green",
+    label="surge+tides",
+)
+
+# Add labels and title
+plt.xlabel("X Axis")
+plt.ylabel("Y Axis")
+plt.title("Plot of Two Lines")
+
+# Add grid and legend
+plt.grid(True)
+plt.legend()
+
+# Show the plot
+plt.show()
