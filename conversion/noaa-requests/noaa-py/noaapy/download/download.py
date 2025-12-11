@@ -13,37 +13,19 @@ class DownloadDataConfig:
     station_ids: List[str]
     datum: str
     products: List[str]
-    start_date: Optional[str] = None
-    end_date: Optional[str] = None
+    date_range: Optional[pd.Interval] = None
 
 
 def download(
-    download_data_cfg: DownloadDataConfig,
-    station_list,
+    download_request_cfg: DownloadDataConfig,
+    stations: dict,
 ):
     """Entry point to the download."""
-    # station_ids = download_data_cfg.station_ids
-    # requested_datum = download_data_cfg.datum
-    # prod = download_data_cfg.prod
-    # operation = download_data_cfg.op_mode
-    # begin_date = download_data_cfg.d_beg
-    # end_date = download_data_cfg.d_end
-
     start_time = datetime.datetime.now()
 
-    # Defaults from globals
-    # datum = noaapy.globals.DEFAULT_DATUM
-    # timezone = noaapy.globals.DEFAULT_TIMEZONE
-    # units = noaapy.globals.DEFAULT_UNITS
-    # data_format = noaapy.globals.DEFAULT_DATA_FORMAT
-    # gen_url = noaapy.globals.BASE_API_URL
-    # timeout = noaapy.globals.DEFAULT_TIMEOUT
-    # request_options = {"timeout": timeout}
-
     # Station lookup and validity check
-    stations = _build_station_lookup(station_list)
     station_ids, not_found = _filter_station_ids(
-        download_data_cfg.station_ids, stations
+        download_request_cfg.station_ids, stations
     )
 
     # Results container
@@ -52,30 +34,39 @@ def download(
     # Loop over stations and products
     for station_id in station_ids:
         station = stations[station_id]
-        for product in download_data_cfg.products:
-            # Create base entry and append immediately so all helpers
-            # can rely on its index.
-            s_data_entry = _base_data_entry(station_id, station)
-            data.append(s_data_entry)
-            entry_idx = len(data) - 1
+        for product in download_request_cfg.products:
+            station_product = {
+                "id": station_id,
+                "name": station["name"],
+                "lon": station["lng"],
+                "lat": station["lat"],
+                "state": station["state"],
+                "WL_datum": "Not found",
+                "TP_datum": "Not found",
+                "WL_downloaded_product": "Not found",
+                "TP_downloaded_product": "Not found",
+                "record_length": "Not found",
+                "WL": "Not found",
+                "TP": "Not found",
+            }
+            # data.append(station_product)
+            # entry_idx = len(data) - 1
 
             interval_param: str = noaapy.globals.INTERVAL_NAME_TO_PARAM[product]
             if product not in noaapy.globals.INTERVAL_NAME_TO_PARAM:
                 continue
 
-            # download based
-            if download_data_cfg.start_date and download_data_cfg.end_date:
+            # download based on dates
+            if download_request_cfg.date_range:
                 print(
-                    f"Download specific date range for station {station_id} and product {product}. From {download_data_cfg.start_date} to {download_data_cfg.end_date}"
+                    f"Download specific date range for station {station_id} and product {product}. From {download_request_cfg.start_date} to {download_request_cfg.end_date}"
                 )
                 # For "specific_date", ensure requested date range is available
                 idx, end_date, begin_date = noaapy.dates.date_search(
                     station,
-                    download_data_cfg.start_date,
-                    download_data_cfg.end_date,
-                    idx,
+                    download_request_cfg.date_range.left,  # start
+                    download_request_cfg.date_range.right,  # end
                 )
-
                 # Update station record dates if needed
                 station["start_date"][idx] = (
                     f"{begin_date.strftime('%Y-%m-%d %H:%M:%S')} GMT"
@@ -88,19 +79,19 @@ def download(
                     f"Downloading full record for station '{station_id}' and product '{product}'"
                 )
 
-            # datums = noaapy.download.queries.get_available_datums("9414290")
-            datum, datum_p = noaapy.params.get_datum(station, download_data_cfg.datum)
-
+            water_level_datum, tide_prediction_datum, _ = noaapy.params.get_datum(
+                station, download_request_cfg.datum
+            )
             # Tidal prediction interval
-            interval, _ = noaapy.params.prediction_interval_selector(
+            interval, _ = noaapy.params.get_prediction_interval(
                 station, interval_param, station["greatlakes"]
             )
 
             # Update metadata on the entry
-            s_data_entry.update(
+            station_product.update(
                 {
-                    "WL_datum": datum,
-                    "TP_datum": datum_p,
+                    "WL_datum": water_level_datum,
+                    "TP_datum": tide_prediction_datum,
                     "WL_downloaded_product": noaapy.globals.PRODUCT_LABELS[
                         interval_param
                     ],
@@ -110,14 +101,14 @@ def download(
             )
 
             # NAVD88 adjustment for NOAA endpoints
-            wl_datum_for_api = datum.replace("NAVD88", "NAVD")
-            tp_datum_for_api = datum_p.replace("NAVD88", "NAVD")
+            water_level_datum = water_level_datum.replace("NAVD88", "NAVD")
+            tide_prediction_datum = tide_prediction_datum.replace("NAVD88", "NAVD")
 
             # Download water levels
             data = noaapy.download.download_wl(
                 entry_idx,
                 data,
-                wl_datum_for_api,
+                water_level_datum,
                 station_id,
                 timezone,
                 units,
@@ -133,7 +124,7 @@ def download(
             data = noaapy.download.download_tidal_predictions(
                 entry_idx,
                 data,
-                tp_datum_for_api,
+                tide_prediction_datum,
                 station_id,
                 timezone,
                 units,
@@ -161,20 +152,13 @@ def download(
             data = noaapy.processing.record_length_calc(entry_idx, data, interval_param)
 
             # Add Begin / End timestamps to this entry
-            _set_beg_end_from_wl_entry(s_data_entry)
+            _set_beg_end_from_wl_entry(station_product)
 
     end_time = datetime.datetime.now()
     run_time = end_time - start_time
     print(f"Total Run Time: {run_time}")
 
     return data, not_found
-
-
-def _build_station_lookup(
-    station_list: Iterable[Dict[str, Any]],
-) -> Dict[str, Dict[str, Any]]:
-    """Map station id -> station dict."""
-    return {s["id"]: s for s in station_list}
 
 
 def _filter_station_ids(
@@ -194,24 +178,6 @@ def _filter_station_ids(
             not_found.append(station_id)
 
     return valid_ids, not_found
-
-
-def _base_data_entry(station_id: str, station: Dict[str, Any]) -> Dict[str, Any]:
-    """Initialize a result entry with common fields + 'Not found' defaults."""
-    return {
-        "id": station_id,
-        "name": station["name"],
-        "lon": station["lng"],
-        "lat": station["lat"],
-        "state": station["state"],
-        "WL_datum": "Not found",
-        "TP_datum": "Not found",
-        "WL_downloaded_product": "Not found",
-        "TP_downloaded_product": "Not found",
-        "record_length": "Not found",
-        "WL": "Not found",
-        "TP": "Not found",
-    }
 
 
 def _set_beg_end_from_wl_entry(entry: Dict[str, Any]) -> None:

@@ -1,4 +1,4 @@
-def prediction_interval_selector(d_struct, flag1, flag2):
+def get_prediction_interval(d_struct, flag1, flag2):
     if not flag2 and not isinstance(d_struct["datums_predictions"], list):
         dummy = [prediction["value"] for prediction in d_struct["predictions_products"]]
         dummy2 = (

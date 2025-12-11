@@ -1,8 +1,11 @@
 # conversion/noaa-requests/noaa-py/main.py
+import pandas as pd
+
 import noaapy
 
 # api docs
 # https://api.tidesandcurrents.noaa.gov/api/prod/
+# https://tidesandcurrents.noaa.gov/api-helper/url-generator.html
 
 
 def main():
@@ -12,18 +15,17 @@ def main():
         include_historical=True,
     )
     station_list = noaapy.station_list.build(station_list_build_cfg)
+    stations = {s["id"]: s for s in station_list}  # convert to dict for easy ref
 
-
-    download_data_cfg = noaapy.download.DownloadDataConfig(
+    download_request_cfg = noaapy.download.DownloadDataConfig(
         station_ids=["9414290"],
         datum="MSL",
-        products=["Verified Monthly Mean Water Level"],
-        start_date=None,  # Not used in full record mode
-        end_date=None,  # Not used in full record mode
+        products=["water_level", "predictions"],
+        date_range=pd.Interval(pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-31")),
     )
     data, not_found = noaapy.download.download(
-        download_data_cfg=download_data_cfg,
-        station_list=station_list,
+        download_request_cfg=download_request_cfg,
+        stations=stations,
     )
 
     save_path = "../data/intermediate/noaa-requests/noaa_data.csv"

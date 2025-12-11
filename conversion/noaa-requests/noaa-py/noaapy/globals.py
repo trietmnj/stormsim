@@ -5,11 +5,6 @@ DEFAULT_TIMEZONE = "GMT"  # Preferred Time Zone for Data Download
 DEFAULT_UNITS = "metric"  # Preferred Units for Data Download
 DEFAULT_DATA_FORMAT = "csv"  # Download Data Format
 DEFAULT_TIMEOUT = 800
-DEFAULT_PRODUCTS = [
-    "Verified Monthly Mean Water Level",
-    "Verified Hourly Height Water Level",
-    "Verified 6-Minute Water Level",
-]
 
 
 INTERVAL_NAME_TO_PARAM = {
@@ -34,3 +29,16 @@ INTERVAL_TO_PRODUCT_PARAM = {
     "1": "hourly_height",
     "hilo": "high_low",
 }
+
+MASTER_PRODUCT_LIST = [
+    "water_level",
+    "hourly_height",
+    "high_low",
+    "daily_mean",
+    "daily_max_min",
+    "daily_max_min",
+    "one_minute_water_level",
+    "predictions",  # tide
+    "one_minute_water_level",
+    "air_gap",
+]

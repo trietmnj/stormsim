@@ -4,6 +4,8 @@ from datetime import datetime
 from typing import List
 
 
+class TimeSegment:
+
 @dataclass
 class TimeSegments:
     starts: List[str]
