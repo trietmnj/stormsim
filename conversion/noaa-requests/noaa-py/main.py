@@ -8,6 +8,11 @@ import noaapy
 # https://tidesandcurrents.noaa.gov/api-helper/url-generator.html
 
 
+# 2 data pieces needed from the NOAA CO-OPS API for each storm event:
+# 1. Contribution from tides - interpolated mapped to the time step as the hydrograph
+# 2. Steric adjustment - singular value
+
+
 def main():
     station_list_build_cfg = noaapy.station_list.StationListBuildConfig(
         selection_type=1,

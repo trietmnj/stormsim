@@ -13,7 +13,7 @@ def download_wl(
     timezone: str,
     units: str,
     fmt: str,
-    dates: noaapy.dates.DateRange,
+    dates: noaapy.dates.DateRanges,
     gen_url: str,
     interval: str,
     options: Dict[str, Any] | None = None,

@@ -1,14 +1,14 @@
 # conversion/noaa-requests/noaa-py/noaapy/download_segmentation.py
 from datetime import datetime, timedelta
 from typing import Dict, List, Tuple
-from dataclasses import dataclass
 
+import pandas as pd
 
 import noaapy
-from .dates import DateRange, TimeSegments
+from .dates import DateRanges
 
 
-def parse_dates(station, interval_param: str, idx: int) -> DateRange:
+def parse_dates(station, interval_param: str, idx: int) -> DateRanges:
     """
     Parse the segmentation date ranges for a given station based on the specified flag.
     Args:
@@ -45,10 +45,7 @@ def parse_dates(station, interval_param: str, idx: int) -> DateRange:
     )
 
     return DateRange(
-        observed=TimeSegments(
-            starts=start_dates,
-            ends=end_dates,
-        ),
+        observed=pd.Interval( start_dates, end_dates,),
         prediction=TimeSegments(
             starts=prediction_start_dates,
             ends=prediction_end_dates,

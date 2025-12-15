@@ -49,8 +49,6 @@ def download(
                 "WL": "Not found",
                 "TP": "Not found",
             }
-            # data.append(station_product)
-            # entry_idx = len(data) - 1
 
             interval_param: str = noaapy.globals.INTERVAL_NAME_TO_PARAM[product]
             if product not in noaapy.globals.INTERVAL_NAME_TO_PARAM:
@@ -63,8 +61,7 @@ def download(
                 )
                 idx, end_date, begin_date = noaapy.dates.get_valid_station_interval(
                     station,
-                    download_request_cfg.date_range.left,  # start
-                    download_request_cfg.date_range.right,  # end
+                    download_request_cfg.date_range
                 )
                 # Update station record dates if needed
                 station["start_date"][idx] = (

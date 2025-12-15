@@ -42,3 +42,8 @@ MASTER_PRODUCT_LIST = [
     "one_minute_water_level",
     "air_gap",
 ]
+
+PRODUCT_DATE_RANGE_LIMIT = {
+    "hourly_height": 365,
+    "water_level": 31
+}

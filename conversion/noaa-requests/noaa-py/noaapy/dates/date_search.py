@@ -1,58 +1,62 @@
 # conversion/noaa-requests/noaa-py/noaapy/dates/date_search.py
-import datetime
-from typing import Dict, List, Tuple
+import datetime as dt
+from typing import List, Tuple
 
-from .dates import DateRange
+import pandas as pd
+
+from .dates import DateRanges
 
 
 def get_valid_station_interval(
-    dates: DateRange,
-    d_beg: datetime.datetime,
-    d_end: datetime.datetime,
-    idx: List[int],
-) -> Tuple[List[int], datetime.datetime, datetime.datetime, bool]:
+    dates: DateRanges,
+    request: pd.Interval,
+    indices: List[int],
+) -> Tuple[List[int], dt.datetime, dt.datetime, bool]:
     """
-    Get valid date range for station within the data request date range
-    d_struct["start_date"], d_struct["end_date"]:
-        lists of 'yyyy-mm-dd HH:MM:SS' strings
-    indx:
-        list of indices into those lists (0-based)
+    Given a requested datetime interval and a subset of availability ranges,
+    determine the valid requested range for a station.
+
+    Returns:
+        (valid_indices, valid_start, valid_end, invalid)
+
+    Notes:
+    - dates["start_date"][i] / dates["end_date"][i] are strings; only the first 19
+      characters are used ("YYYY-mm-dd HH:MM:SS").
+    - If the request does not overlap any availability range -> invalid=True.
+    - If the request is fully contained by one or more availability ranges -> return those indices.
+    - If the request partially overlaps -> clamp start/end to availability boundaries.
     """
-    invalid_flag = False
+    req_start = request.left.to_pydatetime()
+    req_end = request.right.to_pydatetime()
 
-    # Parse only the ranges we care about (those in indx)
-    starts = [
-        datetime.datetime.strptime(dates["start_date"][i][:19], "%Y-%m-%d %H:%M:%S")
-        for i in idx
-    ]
-    ends = [
-        datetime.datetime.strptime(dates["end_date"][i][:19], "%Y-%m-%d %H:%M:%S")
-        for i in idx
-    ]
+    def parse(s: str) -> dt.datetime:
+        return dt.datetime.strptime(s[:19], "%Y-%m-%d %H:%M:%S")
 
-    # Flags for whether d_beg / d_end fall inside each interval
-    beg_inside = [start <= d_beg <= end for start, end in zip(starts, ends)]
-    end_inside = [start <= d_end <= end for start, end in zip(starts, ends)]
+    windows = [(parse(dates["start_date"][i]), parse(dates["end_date"][i])) for i in indices]
 
-    # 0 = neither inside, 1 = one inside, 2 = both inside
-    overlap_score = [int(b) + int(e) for b, e in zip(beg_inside, end_inside)]
+    # Any overlap at all? (inclusive endpoints)
+    def overlaps(a_start: dt.datetime, a_end: dt.datetime) -> bool:
+        return not (req_end < a_start or req_start > a_end)
 
-    # Case 1: no overlap at all
-    if all(score == 0 for score in overlap_score):
-        invalid_flag = True
+    overlapping = [(i, w) for i, w in zip(indices, windows) if overlaps(*w)]
+    if not overlapping:
+        return indices, req_start, req_end, True
 
-    # Case 2: some interval fully contains [d_beg, d_end]
-    elif any(score == 2 for score in overlap_score):
-        # choose all such indices, mapped back to original d_struct indices
-        idx = [idx[i] for i, score in enumerate(overlap_score) if score == 2]
+    # Fully contained in a window?
+    def contains(w_start: dt.datetime, w_end: dt.datetime) -> bool:
+        return w_start <= req_start and req_end <= w_end
 
-    # Case 3: partial overlap – adjust d_beg or d_end to nearest boundary
-    elif any(score == 1 for score in overlap_score):
-        # if start is outside all intervals, snap d_beg to nearest start
-        if not any(beg_inside):
-            d_beg = min(starts, key=lambda t: abs(t - d_beg))
-        # if end is outside all intervals, snap d_end to nearest end
-        elif not any(end_inside):
-            d_end = min(ends, key=lambda t: abs(t - d_end))
+    containing = [i for i, (w_start, w_end) in overlapping if contains(w_start, w_end)]
+    if containing:
+        return containing, req_start, req_end, False
 
-    return idx, d_end, d_beg, invalid_flag
+    # Partial overlap: clamp the request to the union of overlapping windows.
+    starts = [w_start for _, (w_start, _) in overlapping]
+    ends = [w_end for _, (_, w_end) in overlapping]
+
+    clamped_start = max(req_start, min(starts))
+    clamped_end = min(req_end, max(ends))
+
+    # Safety: clamping should preserve overlap, but guard anyway.
+    invalid = clamped_start > clamped_end
+    return indices, clamped_start, clamped_end, invalid

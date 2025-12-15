@@ -3,19 +3,13 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import List
 
-
-class TimeSegment:
-
-@dataclass
-class TimeSegments:
-    starts: List[str]
-    ends: List[str]
+import pandas as pd
 
 
 @dataclass
-class DateRange:
-    observed: TimeSegments
-    prediction: TimeSegments
+class DateRanges:
+    observed: List[pd.Interval]
+    prediction: List[pd.Interval]
 
 
 def parse_dt(s: str) -> datetime:
