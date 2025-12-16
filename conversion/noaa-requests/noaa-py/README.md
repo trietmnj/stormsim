@@ -15,7 +15,7 @@ uv run noaa-requests/noaa-py/seasonal_cycle.py
 2. Identify the relevant stations
 
 ```bash
-uv run noaa-requests/noaa-py/station.py
+uv run noaa-requests/noaa-py/stations.py
 ```
 
 3. Download the tidal timeseries data

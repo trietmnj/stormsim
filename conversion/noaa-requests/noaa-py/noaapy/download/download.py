@@ -10,7 +10,7 @@ import noaapy
 
 @dataclass
 class DownloadDataConfig:
-    station_ids: List[str]
+    stations: Dict[str, Dict[str, Any]]
     datum: str
     products: List[str]
     date_range: Optional[pd.Interval] = None
@@ -21,11 +21,11 @@ def download(
     stations: dict,
 ):
     """Entry point to the download."""
+    station_ids: List[str] = [s for s in stations.keys()]
     start_time = datetime.datetime.now()
-
     # Station lookup and validity check
     station_ids, not_found = _filter_station_ids(
-        download_request_cfg.station_ids, stations
+        station_ids, stations
     )
 
     # Results container

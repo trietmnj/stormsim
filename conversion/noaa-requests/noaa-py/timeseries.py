@@ -1,5 +1,6 @@
 # conversion/noaa-requests/noaa-py/main.py
 import pandas as pd
+import json
 
 import noaapy
 
@@ -7,23 +8,19 @@ import noaapy
 # https://api.tidesandcurrents.noaa.gov/api/prod/
 # https://tidesandcurrents.noaa.gov/api-helper/url-generator.html
 
+# This script downloads a specific data need:
+# Contribution from tides - interpolated mapped to the time step as the hydrograph
 
-# 2 data pieces needed from the NOAA CO-OPS API for each storm event:
-# 1. Contribution from tides - interpolated mapped to the time step as the hydrograph
-# 2. Steric adjustment - singular value
+STATION_PATH = "../data/intermediate/noaa-requests/stations.json"
 
 
 def main():
-    station_list_build_cfg = noaapy.station_list.StationListBuildConfig(
-        selection_type=1,
-        station_ids=["9414290"],
-        include_historical=True,
-    )
-    station_list = noaapy.station_list.build(station_list_build_cfg)
-    stations = {s["id"]: s for s in station_list}  # convert to dict for easy ref
+
+    with open(STATION_PATH, "r", encoding="utf-8") as f:
+        stations = json.load(f)
 
     download_request_cfg = noaapy.download.DownloadDataConfig(
-        station_ids=["9414290"],
+        stations=stations,
         datum="MSL",
         products=["water_level", "predictions"],
         date_range=pd.Interval(pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-31")),
