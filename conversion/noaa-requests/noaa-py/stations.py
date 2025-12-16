@@ -3,7 +3,6 @@ import json
 
 import noaapy
 
-
 # api docs
 # https://api.tidesandcurrents.noaa.gov/api/prod/
 # https://tidesandcurrents.noaa.gov/api-helper/url-generator.html

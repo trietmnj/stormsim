@@ -4,7 +4,7 @@ NOAA data download converted to python
 
 ## Usage
 
-The intended workflow is 3 fold:
+The intended workflow is split into 2 steps:
 
 1. Download the seasonal annual cycle data for steric adjustments
 
@@ -12,16 +12,10 @@ The intended workflow is 3 fold:
 uv run noaa-requests/noaa-py/seasonal_cycle.py
 ```
 
-2. Identify the relevant stations
+2. Download the tidal prediction timeseries data
 
 ```bash
-uv run noaa-requests/noaa-py/stations.py
-```
-
-3. Download the tidal timeseries data
-
-```bash
-uv run noaa-requests/noaa-py/timeseries.py
+uv run noaa-requests/noaa-py/tides.py
 ```
 
 **Notes: Everything should be run from the base dir `conversion/` with `pyproject.toml` **
