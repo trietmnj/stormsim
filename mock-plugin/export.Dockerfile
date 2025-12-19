@@ -6,12 +6,12 @@ PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-COPY cc-demo/seed/stormsim-mock-plugin/damage-functions.json /seed/damage-functions.json
-COPY cc-demo/stormsim-mock-plugin/ /app
-COPY cc-py-sdk/src/cc/ /app/cc/
+COPY mock-plugin/seed/damage-functions.json /seed/damage-functions.json
+COPY mock-plugin/ /app
+COPY mock-plugin/cc-py-sdk/src/cc/ /app/cc/
 
 # Install python dependencies
-COPY cc-demo/stormsim-mock-plugin/requirements.txt /tmp/requirements.txt
+COPY mock-plugin/requirements.txt /tmp/requirements.txt
 RUN pip install --upgrade pip && \
 pip install -r /tmp/requirements.txt
 

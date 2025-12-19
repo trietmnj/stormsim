@@ -9,3 +9,6 @@ data/*
 !data/raw/conversion-lifecycle-generation/**
 
 **python_outputs**
+
+mock-plugin/cc-py-sdk/
+mock-plugin/seed/
