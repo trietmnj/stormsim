@@ -12,10 +12,10 @@
       "console": "integratedTerminal"
     },
     {
-      "name": "Download NOAA",
+      "name": "Download NOAA Timeseries",
       "type": "python",
       "request": "launch",
-      "program": "${workspaceFolder}/noaa-requests/noaa-py/main.py",
+      "program": "${workspaceFolder}/noaa-requests/noaa-py/timeseries.py",
       "console": "integratedTerminal",
       "justMyCode": false
     }
