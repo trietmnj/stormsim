@@ -14,7 +14,7 @@ class HydroManipulator:
         Initialize HydroManipulator with optional JSON config.
         """
         self.config = {}
-        
+
         if config_path:
             self.load_config(config_path)
 
@@ -79,7 +79,7 @@ class HydroManipulator:
         yq = f(tq_sec)
         return yq
 
-    
+
     def list_h5_files(self):
         files = glob.glob(os.path.join(self.config["node_data_path"], "*.h5"))
         return [os.path.basename(f) for f in files]
@@ -145,17 +145,17 @@ class HydroManipulator:
         }
 
         return matched_headers, Tp_special
-    
+
     def parse_timestamps(self, arr):
         """
         Convert an array of floats in YYYYMMDDHHMM format into datetimes,
         and compute timestep differences in seconds.
-        
+
         Parameters
         ----------
         arr : np.ndarray
             Array of floats like 200007110510.0
-        
+
         Returns
         -------
         dates : list of datetime
@@ -165,20 +165,20 @@ class HydroManipulator:
         """
         # Convert each float to datetime
         dates = [datetime.strptime(str(int(x)), "%Y%m%d%H%M") for x in arr]
-        
+
         # Compute differences in seconds
         dts = np.array([
             (dates[i+1] - dates[i]).total_seconds()
             for i in range(len(dates)-1)
         ])/60
-        
+
         return dates, dts
-    
+
     def datetime_vector(self, seed_date, dt_minutes, length):
         """
         Create an array of datetimes starting from seed_date,
         spaced by dt_minutes, with given length.
-        
+
         Parameters
         ----------
         seed_date : datetime
@@ -187,7 +187,7 @@ class HydroManipulator:
             Step size in minutes
         length : int
             Number of elements in the vector
-        
+
         Returns
         -------
         list of datetime
@@ -200,7 +200,7 @@ class HydroManipulator:
         Write a dictionary to CSV.
         - Scalar fields are broadcast to match vector length.
         - Vector fields are written row-wise.
-        
+
         Parameters
         ----------
         data_dict : dict
@@ -211,7 +211,7 @@ class HydroManipulator:
         # Normalize values: convert scalars to repeated arrays
         normalized = {}
         max_len = 1
-        
+
         # First pass: find max vector length
         for key, val in data_dict.items():
             if isinstance(val, Iterable) and not isinstance(val, (str, bytes)):
@@ -219,7 +219,7 @@ class HydroManipulator:
             else:
                 length = 1
             max_len = max(max_len, length)
-        
+
         # Second pass: broadcast scalars
         for key, val in data_dict.items():
             if isinstance(val, Iterable) and not isinstance(val, (str, bytes)):
@@ -227,7 +227,7 @@ class HydroManipulator:
             else:
                 arr = [val] * max_len
             normalized[key] = arr
-        
+
         # Write to CSV
         with open(filename, "w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=normalized.keys())
@@ -235,7 +235,7 @@ class HydroManipulator:
             for i in range(max_len):
                 row = {k: normalized[k][i] for k in normalized}
                 writer.writerow(row)
-                
+
     def write_dicts_to_csv(self, dicts, filename):
         """
         Write a list of dictionaries to a single CSV file.

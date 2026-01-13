@@ -7,6 +7,7 @@ uv.lock
 data/*
 !**.gitkeep
 !data/raw/conversion-lifecycle-generation/**
+!data/raw/HydroManipulator_example_Fabian/hydroManipulator_config.json
 
 **python_outputs**
 
