@@ -4,12 +4,15 @@
 **egg-info/
 uv.lock
 
-data/*
-!**.gitkeep
-!data/raw/conversion-lifecycle-generation/**
-!data/raw/HydroManipulator_example_Fabian/hydroManipulator_config.json
+data/finished/
+data/intermediate/
+data/raw/*
+!data/raw/conversion-lifecycle-generation/
+!data/raw/HydroManipulator_example_Fabian/
 
 **python_outputs**
 
 mock-plugin/cc-py-sdk/
 mock-plugin/seed/
+
+*.mat
