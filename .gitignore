@@ -9,6 +9,7 @@ data/intermediate/
 data/raw/*
 !data/raw/conversion-lifecycle-generation/
 !data/raw/HydroManipulator_example_Fabian/
+data/raw/HydroManipulator_example_Fabian/*/
 
 **python_outputs**
 
