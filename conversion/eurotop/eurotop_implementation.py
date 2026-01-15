@@ -4,42 +4,33 @@ import pandas as pd
 import os
 from datetime import datetime
 import warnings
-from HydroManipulator import HydroManipulator
-from runup_and_ot_eurotop_2018_mod import runup_and_ot_eurotop_2018
+from et.HydroManipulator import HydroManipulator
+from et.runup_and_ot_eurotop_2018_mod import runup_and_ot_eurotop_2018
+from et import utils
 
+EURO_CONFIG = "../data/raw/conversion-eurotop/eurotop_run_config.json"
 
-# ---------------------------------------------------------
-# Utility: Split DF into storm segments
-# ---------------------------------------------------------
-def split_df_on_zero(df, col):
-    zero_idx = df.index[df[col] == 0].tolist()
-    boundaries = zero_idx + [len(df)]
-    return [df.iloc[zero_idx[i]:boundaries[i+1]] for i in range(len(zero_idx))]
+def main():
+    warnings.filterwarnings("ignore")
+    print("\n=== EUROTOP PROCESSING STARTED ===")
 
+    config = json.load(open(EURO_CONFIG, "r"))[0]
 
-# ---------------------------------------------------------
-# Resolve input path (single file vs directory)
-# ---------------------------------------------------------
-def resolve_input_paths(config):
-    lc_path = config["lc_data"]
+    file_to_process, outfol = utils.resolve_input_paths(config)
+    os.makedirs(outfol, exist_ok=True)
 
-    if os.path.isfile(lc_path):
-        config["single_file"] = True
-        return [lc_path], config["outpath"]
+    pse_config = json.load(open(config["pse_geometry"], "r"))
+    s_v_file = pd.read_csv(config["stage_vol_file"])
 
-    if os.path.isdir(lc_path):
-        config["single_file"] = False
-        subfol = os.path.basename(lc_path)
-        outfol = os.path.join(config["outpath"], subfol)
+    hm = HydroManipulator()
 
-        files = [
-            os.path.join(lc_path, f)
-            for f in os.listdir(lc_path)
-            if f.lower().endswith(".csv")
-        ]
-        return files, outfol
+    print(f"Files to process: {len(file_to_process)}")
+    print(f"Output folder: {outfol}")
 
-    raise FileNotFoundError(f"Invalid lc_data path: {lc_path}")
+    for lc_file in file_to_process:
+        process_lc_file(lc_file, config, pse_config, s_v_file, hm, outfol)
+
+    print("\n=== ALL PROCESSING COMPLETE ===\n")
 
 
 # ---------------------------------------------------------
@@ -149,28 +140,9 @@ def process_lc_file(lc_file, config, pse_config, s_v_file, hm, outfol):
 
     print("PROCESSING FINISHED")
 
+
 # ---------------------------------------------------------
 # MAIN
 # ---------------------------------------------------------
 if __name__ == "__main__":
-    warnings.filterwarnings("ignore")
-    print("\n=== EUROTOP PROCESSING STARTED ===")
-
-    euro_config = "eurotop_run_config.json"
-    config = json.load(open(euro_config, "r"))[0]
-
-    file_to_process, outfol = resolve_input_paths(config)
-    os.makedirs(outfol, exist_ok=True)
-
-    pse_config = json.load(open(config["pse_geometry"], "r"))
-    s_v_file = pd.read_csv(config["stage_vol_file"])
-
-    hm = HydroManipulator()
-
-    print(f"Files to process: {len(file_to_process)}")
-    print(f"Output folder: {outfol}")
-
-    for lc_file in file_to_process:
-        process_lc_file(lc_file, config, pse_config, s_v_file, hm, outfol)
-
-    print("\n=== ALL PROCESSING COMPLETE ===\n")
+    main()

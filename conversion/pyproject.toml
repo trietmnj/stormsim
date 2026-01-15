@@ -20,4 +20,5 @@ build-backend = "setuptools.build_meta"
 where = [
     "lifecycle-generation",
     "noaa-requests/noaa-py",
+    "eurotop",
 ]
