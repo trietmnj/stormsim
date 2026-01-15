@@ -8,8 +8,10 @@ data/finished/
 data/intermediate/
 data/raw/*
 !data/raw/conversion-lifecycle-generation/
-!data/raw/HydroManipulator_example_Fabian/
-data/raw/HydroManipulator_example_Fabian/*/
+!data/raw/conversion-HydroManipulator_example_Fabian/
+data/raw/conversion-HydroManipulator_example_Fabian/*/
+!data/raw/conversion-eurotop/
+data/raw/conversion-eurotop/*/
 
 **python_outputs**
 

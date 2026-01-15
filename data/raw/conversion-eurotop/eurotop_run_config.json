@@ -1,0 +1,8 @@
+[
+    {
+        "pse_geometry": "pse_geometry.json",
+        "lc_data": "Manipulated_LCs\\EventDate_LC 2",
+        "stage_vol_file": "dummy_stage_vol.csv",
+        "outpath": "eurotop_outputs"
+    }
+]
