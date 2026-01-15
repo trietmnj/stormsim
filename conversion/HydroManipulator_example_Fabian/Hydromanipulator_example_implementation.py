@@ -7,144 +7,15 @@ import pandas as pd
 import h5py
 from HydroManipulator import HydroManipulator
 
-def parse_hour_float(hour_float):
-    """Parses a float hour (e.g. 12.5) into hours, minutes, seconds."""
-    hours = int(hour_float)
-    minutes_remainder = (hour_float - hours) * 60
-    minutes = int(minutes_remainder)
-    seconds = int((minutes_remainder - minutes) * 60)
-    return hours, minutes, seconds
-
-def process_single_storm(hm, storm_id, data, adcirc_h5, wave_h5, group_ids, groups, wave_headers):
-    """
-    Processes a single storm event: aligns ADCIRC and Wave model data
-    and performs interpolation/downscaling.
-    """
-    # Build Seed Date
-    hours, minutes, seconds = parse_hour_float(data["hour"])
-    seed_date = datetime(data["year"], data["month"], data["day"], hours, minutes, seconds)
-
-    # Find the group index for this stormID
-    # Assuming stormID matches one of the groupIDs
-    match_indices = np.where(group_ids == storm_id)[0]
-    if len(match_indices) == 0:
-        print(f"Warning: Storm ID {storm_id} not found in H5 groups. Skipping...")
-        return None
-
-    group_idx = match_indices[0]
-    group_name = groups[group_idx]
-
-    # Extract Dates
-    adcirc_date_raw = np.array(adcirc_h5[group_name]["yyyymmddHHMM"])
-    wave_date_raw = np.array(wave_h5[group_name]["yyyymmddHHMM"])
-
-    adcirc_date, adcirc_dt = hm.parse_timestamps(adcirc_date_raw)
-    wave_date, wave_dt = hm.parse_timestamps(wave_date_raw)
-
-    # Handle degenerate/missing data case
-    if len(adcirc_date) <= 1:
-        data["Water Elevation"] = np.nan
-        data["Hm0"] = np.nan
-        data["Tp"] = np.nan
-        data["Wave Direction"] = np.nan
-        data["Date"] = [seed_date]
-        # data["hydro_tstp"] might need to be set if downstream expects it,
-        # but original code didn't set it in this branch explicitly?
-        # Original code: data["Date"] = [seed_date] and that's it.
-        return data
-
-    # Determine resolution dominance
-    # Note: Using max() of dt arrays gives the coarsest resolution found in the series
-    max_adcirc_dt = np.max(adcirc_dt)
-    max_wave_dt = np.max(wave_dt)
-    target_dt = max(max_adcirc_dt, max_wave_dt)
-
-    if max_adcirc_dt < max_wave_dt:
-        # Circulation Model Has Finer Temporal Resolution (smaller dt)
-        # We need to downscale the Surge Signal (ADCIRC) to match Wave Model resolution?
-        # Original logic: "Need To Downscale Surge Signal" -> "tq = wave_date"
-        # Wait, if ADCIRC is finer (e.g. 10min) and Wave is coarser (e.g. 30min),
-        # interpolating ADCIRC to Wave dates effectively downsamples (downscales resolution) ADCIRC.
-
-        tq = wave_date # Use Wave Model timestamps as query points
-
-        # Interpolate Water Elevation
-        y_elev = np.array(adcirc_h5[group_name]["Water Elevation"])
-        yt_elev = hm.interp_hydrograph(y_elev, adcirc_date, tq)
-
-        # Wave data is already at the target resolution (coarser one)
-        data["Water Elevation"] = yt_elev
-        data["Hm0"] = np.array(wave_h5[group_name][wave_headers["Hm0"]])
-        data["Tp"]  = np.array(wave_h5[group_name][wave_headers["Tp"]])
-        data["Wave Direction"] = np.array(wave_h5[group_name][wave_headers["wDir"]])
-
-        result_len = len(yt_elev)
-
-    elif max_adcirc_dt > max_wave_dt:
-        # Wave Model Has Finer Temporal Resolution
-        # "Need To Downscale Wave Signal" -> Interpolate Wave to ADCIRC timestamps
-
-        # Constrain query range to avoid extrapolation if ADCIRC extends beyond Wave data
-        tmin, tmax = min(wave_date), max(wave_date)
-
-        # Boolean mask: adcirc_date within [tmin, tmax]
-        mask = (np.array(adcirc_date) >= tmin) & (np.array(adcirc_date) <= tmax)
-        tq = [x for x, m in zip(adcirc_date, mask) if m]
-
-        # Pull Wave Data
-        y_hm0  = np.array(wave_h5[group_name][wave_headers["Hm0"]])
-        y_tp   = np.array(wave_h5[group_name][wave_headers["Tp"]])
-        y_wdir = np.array(wave_h5[group_name][wave_headers["wDir"]])
-
-        # Interpolate TO ADCIRC Dates
-        yt_hm0  = hm.interp_hydrograph(y_hm0, wave_date, tq)
-        yt_tp   = hm.interp_hydrograph(y_tp,  wave_date, tq) # Fixed bug: was y_hm0
-        yt_wdir = hm.interp_hydrograph(y_wdir, wave_date, tq) # Fixed bug: was y_hm0
-
-        # ADCIRC Data (masked)
-        data["Water Elevation"] = np.array(adcirc_h5[group_name]["Water Elevation"])[mask]
-        data["Hm0"] = yt_hm0
-        data["Tp"]  = yt_tp
-        data["Wave Direction"] = yt_wdir
-
-        result_len = len(yt_hm0)
-
-    else:
-        # Resolutions are similar/same
-        # Original code: "pass # TBD"
-        # We should probably just pick one timeline.
-        # For safety, let's treat it like the first case (Wave dates as master)
-        # or just fail gracefully if logic isn't defined.
-        # Implemented fallback: Use Wave dates.
-
-        tq = wave_date
-        y_elev = np.array(adcirc_h5[group_name]["Water Elevation"])
-        # If dates are identical, interp is just copy, but safer to interp to handle slight offsets
-        yt_elev = hm.interp_hydrograph(y_elev, adcirc_date, tq)
-
-        data["Water Elevation"] = yt_elev
-        data["Hm0"] = np.array(wave_h5[group_name][wave_headers["Hm0"]])
-        data["Tp"]  = np.array(wave_h5[group_name][wave_headers["Tp"]])
-        data["Wave Direction"] = np.array(wave_h5[group_name][wave_headers["wDir"]])
-
-        result_len = len(yt_elev)
-
-    # Build Hydrograph Date Vector
-    data["Date"] = hm.datetime_vector(seed_date, target_dt, result_len)
-    data["hydro_tstp"] = np.arange(0, result_len)
-
-    return data
+HYDRO_CONFIG = "../data/raw/conversion-HydroManipulator_example_Fabian/hydroManipulator_config.json"
 
 def main():
-    # Define Input JSON
-    hydro_config = "../data/raw/HydroManipulator_example_Fabian/hydroManipulator_config.json"
-
     # Initialize HydroManipulator Class
-    if not os.path.exists(hydro_config):
-        print(f"Error: Configuration file '{hydro_config}' not found.")
+    if not os.path.exists(HYDRO_CONFIG):
+        print(f"Error: Configuration file '{HYDRO_CONFIG}' not found.")
         sys.exit(1)
 
-    hm = HydroManipulator(hydro_config)
+    hm = HydroManipulator(HYDRO_CONFIG)
 
     # Validate Paths
     if not os.path.exists(hm.config["lc_path"]):
@@ -284,6 +155,136 @@ def main():
             hm.write_dict_to_csv(row, os.path.join(output_dir, filename))
 
     print("Processing complete.")
+
+
+def parse_hour_float(hour_float):
+    """Parses a float hour (e.g. 12.5) into hours, minutes, seconds."""
+    hours = int(hour_float)
+    minutes_remainder = (hour_float - hours) * 60
+    minutes = int(minutes_remainder)
+    seconds = int((minutes_remainder - minutes) * 60)
+    return hours, minutes, seconds
+
+def process_single_storm(hm, storm_id, data, adcirc_h5, wave_h5, group_ids, groups, wave_headers):
+    """
+    Processes a single storm event: aligns ADCIRC and Wave model data
+    and performs interpolation/downscaling.
+    """
+    # Build Seed Date
+    hours, minutes, seconds = parse_hour_float(data["hour"])
+    seed_date = datetime(data["year"], data["month"], data["day"], hours, minutes, seconds)
+
+    # Find the group index for this stormID
+    # Assuming stormID matches one of the groupIDs
+    match_indices = np.where(group_ids == storm_id)[0]
+    if len(match_indices) == 0:
+        print(f"Warning: Storm ID {storm_id} not found in H5 groups. Skipping...")
+        return None
+
+    group_idx = match_indices[0]
+    group_name = groups[group_idx]
+
+    # Extract Dates
+    adcirc_date_raw = np.array(adcirc_h5[group_name]["yyyymmddHHMM"])
+    wave_date_raw = np.array(wave_h5[group_name]["yyyymmddHHMM"])
+
+    adcirc_date, adcirc_dt = hm.parse_timestamps(adcirc_date_raw)
+    wave_date, wave_dt = hm.parse_timestamps(wave_date_raw)
+
+    # Handle degenerate/missing data case
+    if len(adcirc_date) <= 1:
+        data["Water Elevation"] = np.nan
+        data["Hm0"] = np.nan
+        data["Tp"] = np.nan
+        data["Wave Direction"] = np.nan
+        data["Date"] = [seed_date]
+        # data["hydro_tstp"] might need to be set if downstream expects it,
+        # but original code didn't set it in this branch explicitly?
+        # Original code: data["Date"] = [seed_date] and that's it.
+        return data
+
+    # Determine resolution dominance
+    # Note: Using max() of dt arrays gives the coarsest resolution found in the series
+    max_adcirc_dt = np.max(adcirc_dt)
+    max_wave_dt = np.max(wave_dt)
+    target_dt = max(max_adcirc_dt, max_wave_dt)
+
+    if max_adcirc_dt < max_wave_dt:
+        # Circulation Model Has Finer Temporal Resolution (smaller dt)
+        # We need to downscale the Surge Signal (ADCIRC) to match Wave Model resolution?
+        # Original logic: "Need To Downscale Surge Signal" -> "tq = wave_date"
+        # Wait, if ADCIRC is finer (e.g. 10min) and Wave is coarser (e.g. 30min),
+        # interpolating ADCIRC to Wave dates effectively downsamples (downscales resolution) ADCIRC.
+
+        tq = wave_date # Use Wave Model timestamps as query points
+
+        # Interpolate Water Elevation
+        y_elev = np.array(adcirc_h5[group_name]["Water Elevation"])
+        yt_elev = hm.interp_hydrograph(y_elev, adcirc_date, tq)
+
+        # Wave data is already at the target resolution (coarser one)
+        data["Water Elevation"] = yt_elev
+        data["Hm0"] = np.array(wave_h5[group_name][wave_headers["Hm0"]])
+        data["Tp"]  = np.array(wave_h5[group_name][wave_headers["Tp"]])
+        data["Wave Direction"] = np.array(wave_h5[group_name][wave_headers["wDir"]])
+
+        result_len = len(yt_elev)
+
+    elif max_adcirc_dt > max_wave_dt:
+        # Wave Model Has Finer Temporal Resolution
+        # "Need To Downscale Wave Signal" -> Interpolate Wave to ADCIRC timestamps
+
+        # Constrain query range to avoid extrapolation if ADCIRC extends beyond Wave data
+        tmin, tmax = min(wave_date), max(wave_date)
+
+        # Boolean mask: adcirc_date within [tmin, tmax]
+        mask = (np.array(adcirc_date) >= tmin) & (np.array(adcirc_date) <= tmax)
+        tq = [x for x, m in zip(adcirc_date, mask) if m]
+
+        # Pull Wave Data
+        y_hm0  = np.array(wave_h5[group_name][wave_headers["Hm0"]])
+        y_tp   = np.array(wave_h5[group_name][wave_headers["Tp"]])
+        y_wdir = np.array(wave_h5[group_name][wave_headers["wDir"]])
+
+        # Interpolate TO ADCIRC Dates
+        yt_hm0  = hm.interp_hydrograph(y_hm0, wave_date, tq)
+        yt_tp   = hm.interp_hydrograph(y_tp,  wave_date, tq) # Fixed bug: was y_hm0
+        yt_wdir = hm.interp_hydrograph(y_wdir, wave_date, tq) # Fixed bug: was y_hm0
+
+        # ADCIRC Data (masked)
+        data["Water Elevation"] = np.array(adcirc_h5[group_name]["Water Elevation"])[mask]
+        data["Hm0"] = yt_hm0
+        data["Tp"]  = yt_tp
+        data["Wave Direction"] = yt_wdir
+
+        result_len = len(yt_hm0)
+
+    else:
+        # Resolutions are similar/same
+        # Original code: "pass # TBD"
+        # We should probably just pick one timeline.
+        # For safety, let's treat it like the first case (Wave dates as master)
+        # or just fail gracefully if logic isn't defined.
+        # Implemented fallback: Use Wave dates.
+
+        tq = wave_date
+        y_elev = np.array(adcirc_h5[group_name]["Water Elevation"])
+        # If dates are identical, interp is just copy, but safer to interp to handle slight offsets
+        yt_elev = hm.interp_hydrograph(y_elev, adcirc_date, tq)
+
+        data["Water Elevation"] = yt_elev
+        data["Hm0"] = np.array(wave_h5[group_name][wave_headers["Hm0"]])
+        data["Tp"]  = np.array(wave_h5[group_name][wave_headers["Tp"]])
+        data["Wave Direction"] = np.array(wave_h5[group_name][wave_headers["wDir"]])
+
+        result_len = len(yt_elev)
+
+    # Build Hydrograph Date Vector
+    data["Date"] = hm.datetime_vector(seed_date, target_dt, result_len)
+    data["hydro_tstp"] = np.arange(0, result_len)
+
+    return data
+
 
 if __name__ == "__main__":
     main()
