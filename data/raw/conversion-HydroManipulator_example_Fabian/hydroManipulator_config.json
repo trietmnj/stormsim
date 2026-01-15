@@ -6,7 +6,7 @@
     "add_tides": "True",
     "add_slr": "True",
     "add_depth_limitation": "True",
-    "outpath": "../data/raw/conversion-HydroManipulator_example_Fabian/Manipulated_LCs",
+    "outpath": "../data/intermediate/conversion-HydroManipulator_example_Fabian/Manipulated_LCs",
     "write_single_file": "True"
   }
 ]

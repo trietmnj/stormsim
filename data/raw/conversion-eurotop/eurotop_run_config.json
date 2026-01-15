@@ -1,8 +1,8 @@
 [
   {
     "pse_geometry": "../data/raw/conversion-eurotop/pse_geometry.json",
-    "lc_data": "../data/intermediate/conversion-HydroManipulator_example_Fabian/Manipulated_LCs/EventDate_LC.csv",
+    "lc_data": "../data/intermediate/conversion-HydroManipulator_example_Fabian/Manipulated_LCs/EventDate_LC 2.csv",
     "stage_vol_file": "../data/raw/conversion-eurotop/dummy_stage_vol.csv",
-    "outpath": "eurotop_outputs"
+    "outpath": "../data/intermediate/conversion-eurotop"
   }
 ]
