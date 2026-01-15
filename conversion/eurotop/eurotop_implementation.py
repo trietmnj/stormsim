@@ -124,7 +124,7 @@ def process_lc_file(lc_file, config, pse_config, s_v_file, hm, outfol):
     print("COMPUTING responses...")
 
     if config["single_file"]:
-        stm_list = split_df_on_zero(lc_data, "hydro_tstp")
+        stm_list = utils.split_df_on_zero(lc_data, "hydro_tstp")
         results = [
             compute_storm_response(stm, args, pse_config, s_v_file)
             for stm in stm_list
