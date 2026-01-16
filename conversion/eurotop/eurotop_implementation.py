@@ -9,6 +9,10 @@ from et.runup_and_ot_eurotop_2018_mod import runup_and_ot_eurotop_2018
 from et import utils
 
 EURO_CONFIG = "../data/raw/conversion-eurotop/eurotop_run_config.json"
+OUTPUT_COL_ORDER = [
+    "date", "storm_id", "lifecycle", "runup", "overtopping_rate",
+    "overtopping_volume", "stage"
+]
 
 def main():
     warnings.filterwarnings("ignore")
@@ -123,18 +127,27 @@ def process_lc_file(lc_file, config, pse_config, s_v_file, hm, outfol):
 
     print("COMPUTING responses...")
 
+
     if config["single_file"]:
         stm_list = utils.split_df_on_zero(lc_data, "hydro_tstp")
         results = [
             compute_storm_response(stm, args, pse_config, s_v_file)
             for stm in stm_list
         ]
+        
+        # Reorder columns
+        results = [{k: res[k] for k in OUTPUT_COL_ORDER if k in res} for res in results]
+
         print(f"   {len(results)} storm segments processed")
         print("WRITING data...")
         hm.write_dicts_to_csv(results, outname)
 
     else:
         results = compute_storm_response(lc_data, args, pse_config, s_v_file)
+        
+        # Reorder columns
+        results = {k: results[k] for k in OUTPUT_COL_ORDER if k in results}
+
         print("WRITING data...")
         hm.write_dict_to_csv(results, outname)
 
