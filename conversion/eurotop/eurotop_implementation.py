@@ -4,6 +4,7 @@ import pandas as pd
 import os
 from datetime import datetime
 import warnings
+from tqdm import tqdm
 from et.HydroManipulator import HydroManipulator
 from et.runup_and_ot_eurotop_2018_mod import runup_and_ot_eurotop_2018
 from et import utils
@@ -34,7 +35,7 @@ def main():
     print(f"Files to process: {len(file_to_process)}")
     print(f"Output folder: {outfol}")
 
-    for lc_file in file_to_process:
+    for lc_file in tqdm(file_to_process, desc="Eurotop Processing"):
         process_lc_file(lc_file, config, pse_config, s_v_file, hm, outfol)
 
     print("\n=== ALL PROCESSING COMPLETE ===\n")
@@ -118,7 +119,6 @@ def compute_storm_response(stm, args, pse_config, s_v_file):
 # ---------------------------------------------------------
 def process_lc_file(lc_file, config, pse_config, s_v_file, hm, outfol):
     fname = os.path.basename(lc_file)
-    print(f"\nREADING lc: {fname}")
 
     lc_data = pd.read_csv(lc_file)
     args = pse_config.copy()
@@ -132,8 +132,6 @@ def process_lc_file(lc_file, config, pse_config, s_v_file, hm, outfol):
         fname.replace(".csv", "_stage.csv")
     )
 
-    print("COMPUTING responses...")
-
 
     if config["single_file"]:
         stm_list = utils.split_df_on_zero(lc_data, "hydro_tstp")
@@ -146,8 +144,6 @@ def process_lc_file(lc_file, config, pse_config, s_v_file, hm, outfol):
         results_responses = [{k: res[k] for k in OUTPUT_COL_ORDER_RESPONSES if k in res} for res in results]
         results_stage = [{k: res[k] for k in OUTPUT_COL_ORDER_STAGE if k in res} for res in results]
 
-        print(f"   {len(results)} storm segments processed")
-        print("WRITING data...")
         hm.write_dicts_to_csv(results_responses, outname_responses)
         hm.write_dicts_to_csv(results_stage, outname_stage)
 
@@ -158,11 +154,9 @@ def process_lc_file(lc_file, config, pse_config, s_v_file, hm, outfol):
         results_responses = {k: results[k] for k in OUTPUT_COL_ORDER_RESPONSES if k in results}
         results_stage = {k: results[k] for k in OUTPUT_COL_ORDER_STAGE if k in results}
 
-        print("WRITING data...")
         hm.write_dict_to_csv(results_responses, outname_responses)
         hm.write_dict_to_csv(results_stage, outname_stage)
 
-    print("PROCESSING FINISHED")
 
 
 # ---------------------------------------------------------
