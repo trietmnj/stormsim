@@ -9,9 +9,12 @@ from et.runup_and_ot_eurotop_2018_mod import runup_and_ot_eurotop_2018
 from et import utils
 
 EURO_CONFIG = "../data/raw/conversion-eurotop/eurotop_run_config.json"
-OUTPUT_COL_ORDER = [
-    "date", "storm_id", "lifecycle", "runup", "overtopping_rate",
-    "overtopping_volume", "stage"
+OUTPUT_COL_ORDER_RESPONSES = [
+    "date", "lifecycle", "storm_id", "runup", "overtopping_rate",
+    "overtopping_volume"
+]
+OUTPUT_COL_ORDER_STAGE = [
+    "date", "storm_id", "lifecycle", "stage"
 ]
 
 def main():
@@ -120,9 +123,13 @@ def process_lc_file(lc_file, config, pse_config, s_v_file, hm, outfol):
     lc_data = pd.read_csv(lc_file)
     args = pse_config.copy()
 
-    outname = os.path.join(
+    outname_responses = os.path.join(
         outfol,
         fname.replace(".csv", "_responses.csv")
+    )
+    outname_stage = os.path.join(
+        outfol,
+        fname.replace(".csv", "_stage.csv")
     )
 
     print("COMPUTING responses...")
@@ -134,22 +141,26 @@ def process_lc_file(lc_file, config, pse_config, s_v_file, hm, outfol):
             compute_storm_response(stm, args, pse_config, s_v_file)
             for stm in stm_list
         ]
-        
-        # Reorder columns
-        results = [{k: res[k] for k in OUTPUT_COL_ORDER if k in res} for res in results]
+
+        # Filter columns for each output file
+        results_responses = [{k: res[k] for k in OUTPUT_COL_ORDER_RESPONSES if k in res} for res in results]
+        results_stage = [{k: res[k] for k in OUTPUT_COL_ORDER_STAGE if k in res} for res in results]
 
         print(f"   {len(results)} storm segments processed")
         print("WRITING data...")
-        hm.write_dicts_to_csv(results, outname)
+        hm.write_dicts_to_csv(results_responses, outname_responses)
+        hm.write_dicts_to_csv(results_stage, outname_stage)
 
     else:
         results = compute_storm_response(lc_data, args, pse_config, s_v_file)
-        
-        # Reorder columns
-        results = {k: results[k] for k in OUTPUT_COL_ORDER if k in results}
+
+        # Filter columns for each output file
+        results_responses = {k: results[k] for k in OUTPUT_COL_ORDER_RESPONSES if k in results}
+        results_stage = {k: results[k] for k in OUTPUT_COL_ORDER_STAGE if k in results}
 
         print("WRITING data...")
-        hm.write_dict_to_csv(results, outname)
+        hm.write_dict_to_csv(results_responses, outname_responses)
+        hm.write_dict_to_csv(results_stage, outname_stage)
 
     print("PROCESSING FINISHED")
 
