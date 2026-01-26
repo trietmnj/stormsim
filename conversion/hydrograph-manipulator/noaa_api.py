@@ -36,6 +36,14 @@ class noaa_api:
                     return response.json()
                 return response.text
             except requests.RequestException as e:
+                print(f"Request failed: {e}")
+                try:
+                    # Attempt to print response content if available (e.g. 500 error message)
+                    if e.response is not None:
+                        print(f"Response content: {e.response.text}")
+                except:
+                    pass
+
                 attempt += 1
                 time.sleep(pause_time)
                 if attempt == retries:
@@ -192,8 +200,6 @@ class noaa_api:
         # Build URL
         query_string = "&".join([f"{k}={v}" for k, v in params.items()])
         full_url = f"{base_url}?{query_string}"
-
-        print(f"Fetching predictions for {station}...")
 
         data = self._fetch_url(full_url, is_json=True)
 

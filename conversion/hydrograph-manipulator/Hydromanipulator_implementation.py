@@ -4,11 +4,12 @@ from datetime import datetime, timedelta
 import numpy as np
 import pandas as pd
 import h5py
-from HydroManipulator import HydroManipulator
+from tqdm import tqdm
+from et.HydroManipulator import HydroManipulator
 from noaa_api import noaa_api
 
 # Define Input JSON
-HYDRO_CONFIG = "data/raw/HydroManipulator_example_Fabian/hydroManipulator_config.json"
+HYDRO_CONFIG = "data/raw/conversion-hydrograph-manipulator/hydroManipulator_config.json"
 
 def parse_hour_float(hour_float):
     """Parses a float hour (e.g. 12.5) into hours, minutes, seconds."""
@@ -223,10 +224,58 @@ def main():
     # Prepare Data Dictionary
     stm_dic = lc_data.to_dict(orient="records")
 
+    # --- BATCH FETCHING OPTIMIZATION ---
+    tide_cache = pd.DataFrame()
+    season_trend = None
+
+    if hm.config.get("add_tides") == 'True':
+        print("Pre-fetching seasonal trend data...")
+        try:
+            season_trend = tide_api.get_seasonal_trend(tide_api.config["station"])
+        except Exception as e:
+            print(f"Warning: Failed to fetch seasonal trend: {e}")
+
+        # Determine Global Time Range
+        years = lc_data["year"].unique()
+        min_year = int(years.min())
+        max_year = int(years.max())
+        
+        print(f"Batch fetching tidal predictions from {min_year} to {max_year}...")
+        
+        tide_frames = []
+        for yr in tqdm(range(min_year, max_year + 1), desc="Fetching Tides"):
+            start_d = f"{yr}0101"
+            end_d = f"{yr}1231"
+            
+            try:
+                # Reuse config but override dates
+                batch_config = tide_api.config.copy()
+                batch_config["start_date"] = start_d
+                batch_config["end_date"] = end_d
+                # Force interval to hourly for batch efficiency to avoid API timeouts/errors with 1-min data
+                batch_config["interval"] = "h"
+
+                # print(f"  Fetching year {yr}...")
+                year_data = tide_api.get_tidal_prediction(batch_config)
+                
+                if year_data and "time" in year_data and "value" in year_data:
+                    df_yr = pd.DataFrame(year_data)
+                    tide_frames.append(df_yr)
+                else:
+                    print(f"  Warning: No data for year {yr}")
+            except Exception as e:
+                print(f"  Error fetching year {yr}: {e}")
+
+        if tide_frames:
+            tide_cache = pd.concat(tide_frames).sort_values("time").reset_index(drop=True)
+            print(f"Cached {len(tide_cache)} tidal prediction points.")
+        else:
+            print("Warning: Tidal cache is empty.")
+
     # Loop Through Each Sampled Storm
     print(f"Processing {len(stm_dic)} storms...")
 
-    for i, storm_data in enumerate(stm_dic):
+    for i, storm_data in enumerate(tqdm(stm_dic, desc="Processing Storms")):
         storm_id = storm_data["storm_id"]
 
         processed_data = process_single_storm(
@@ -244,22 +293,34 @@ def main():
             processed_data["water_elevation"] = hm.add_slr(processed_data["water_elevation"], ...)
             '''
             #
-            if hm.config["add_tides"] == 'True':
-                # Get Hydrograph Start/End
-                tide_api.config["start_date"] = processed_data["date"][0].strftime("%Y%m%d")
-                tide_api.config["end_date"] = processed_data["date"][-1].strftime("%Y%m%d")
-                # Pull Tidal Prediction For Station @ Datum | interval
-                tidal_signal = tide_api.get_tidal_prediction(tide_api.config)
-                # Need To Interpolate Tidal Signal To Model Time Vector
-                interp_tide = hm.interp_hydrograph(tidal_signal["value"], tidal_signal["time"], processed_data["date"])
-                # Add Tides To Surge
-                processed_data["water_elevation"] = processed_data["water_elevation"] + interp_tide
-                # Pull Seasonal Trend (Steric Adjustment)
-                season_trend = tide_api.get_seasonal_trend(tide_api.config["station"])
-                # Find Seed Month Row Index
-                row_indx = season_trend['month'].index(processed_data["date"][0].month)
-                # Adjust Surge Signal By Using Upper CL
-                processed_data["water_elevation"] = processed_data["water_elevation"] + season_trend['upper_ci'][row_indx]
+            if hm.config.get("add_tides") == 'True' and not tide_cache.empty:
+                # Define Storm Window
+                s_start = processed_data["date"][0]
+                s_end = processed_data["date"][-1]
+                
+                # Filter Cache (Buffer added to ensure coverage for interpolation)
+                # Note: processed_data["date"] are datetimes
+                subset = tide_cache[
+                    (tide_cache["time"] >= s_start - timedelta(hours=2)) & 
+                    (tide_cache["time"] <= s_end + timedelta(hours=2))
+                ]
+
+                if not subset.empty:
+                    # Need To Interpolate Tidal Signal To Model Time Vector
+                    interp_tide = hm.interp_hydrograph(
+                        subset["value"].values, 
+                        subset["time"].dt.to_pydatetime(), 
+                        processed_data["date"]
+                    )
+                    # Add Tides To Surge
+                    processed_data["water_elevation"] = processed_data["water_elevation"] + interp_tide
+                
+                # Apply Seasonal Trend (Steric Adjustment) if available
+                if season_trend:
+                    # Find Seed Month Row Index
+                    row_indx = season_trend['month'].index(processed_data["date"][0].month)
+                    # Adjust Surge Signal By Using Upper CL
+                    processed_data["water_elevation"] = processed_data["water_elevation"] + season_trend['upper_ci'][row_indx]
             # Update the dictionary record
             stm_dic[i] = processed_data
 
