@@ -18,11 +18,11 @@ LAM_TARGET = 1.7  # local storm recurrence rate (Poisson lambda)
 MIN_ARRIVAL_TROP_DAYS = 7.0
 MIN_ARRIVAL_EXTRA_DAYS = 4.0  # not used yet, but kept for future
 
-REL_PROB_FILE = "../data/raw/conversion-lifecycle-generation/Relative_probability_bins_Atlantic 4.csv"
+REL_PROB_FILE = "data/raw/conversion-lifecycle-generation/Relative_probability_bins_Atlantic 4.csv"
 STORM_ID_PROB_FILE = (
-    "../data/intermediate/conversion-lifecycle-generation/stormprob.csv"
+    "data/intermediate/conversion-lifecycle-generation/stormprob.csv"
 )
-OUTPUT_DIRECTORY = Path("../data/intermediate/conversion-lifecycle-generation/")
+OUTPUT_DIRECTORY = Path("data/intermediate/conversion-lifecycle-generation/")
 
 RNG = np.random.default_rng()  # consistent RNG
 PROFILE = False  # set to True to enable cProfile profiling
@@ -33,7 +33,10 @@ VALIDATE_LAMBDA = False  # set to True to run validation after simulating
 # MAIN DRIVER
 # -----------------------------
 def main():
+    print(f"--- Starting Lifecycle Generation ---")
     OUTPUT_DIRECTORY.mkdir(parents=True, exist_ok=True)
+    
+    print(f"Loading input files:\n  - {REL_PROB_FILE}\n  - {STORM_ID_PROB_FILE}")
     prob_schedule: pd.DataFrame = lcgen.load.load_relative_probabilities(REL_PROB_FILE)
     storm_set: pd.DataFrame = lcgen.load.load_storm_id_cdf(STORM_ID_PROB_FILE)
 
@@ -51,8 +54,12 @@ def main():
 
     all_dfs: list[pd.DataFrame] = []
 
+    print(f"Simulating {NUM_LCS} lifecycles of {LIFECYCLE_DURATION} years each...")
     # Full simulation using calibrated lambda
     for lc in range(NUM_LCS):
+        if lc % 10 == 0:
+            print(f"  Processing lifecycle {lc}/{NUM_LCS}...")
+            
         df = lcgen.sampling.simulate_lifecycle(
             lifecycle_index=lc,
             init_year=INITIALIZE_YEAR,
@@ -68,8 +75,11 @@ def main():
         df_ids = df[cols].copy()
         all_dfs.append(df_ids)
 
+    print("Concatenating results...")
     data = pd.concat(all_dfs, ignore_index=True)
-    data.to_csv(OUTPUT_DIRECTORY / f"EventDate_LC.csv", index=False)
+    output_file = OUTPUT_DIRECTORY / f"EventDate_LC.csv"
+    data.to_csv(output_file, index=False)
+    print(f"✅ Success! Output saved to: {output_file}")
 
     if VALIDATE_LAMBDA:
         # Concatenate all lifecycles for validation (use in-memory frames)

@@ -4,7 +4,7 @@ from scipy.io import loadmat
 from pathlib import Path
 import pandas as pd
 
-BASE_INPUT_DIR = Path("../data/raw/conversion-lifecycle-generation/CHS_Files")
+BASE_INPUT_DIR = Path("data/raw/conversion-lifecycle-generation/CHS_Files")
 INPUT_MAT_FILES = [
     "CHS-NA_nodeID_v4.mat",
     "CHS_Atl_CRLs_v1.6.mat",
@@ -15,7 +15,7 @@ INPUT_MAT_FILES = [
     "CHS-NA_ITCS_Param.mat",
     "CHS-NA_ITCS_DSW_600km.mat",
 ]
-OUTPUT_PATH = Path("../data/intermediate/conversion-lifecycle-generation/stormprob.csv")
+OUTPUT_PATH = Path("data/intermediate/conversion-lifecycle-generation/stormprob.csv")
 EARTH_RADIUS_KM = 6371.0
 
 

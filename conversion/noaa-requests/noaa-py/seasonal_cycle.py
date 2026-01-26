@@ -7,7 +7,7 @@ def main():
     rows = data["uscycletable"]["data"]["rows"]
     data = pd.DataFrame(rows)
 
-    data.to_csv("../data/intermediate/noaa-requests/seasonal_cycle.csv", index=False)
+    data.to_csv("data/intermediate/noaa-requests/seasonal_cycle.csv", index=False)
 
 if __name__ == "__main__":
     main()

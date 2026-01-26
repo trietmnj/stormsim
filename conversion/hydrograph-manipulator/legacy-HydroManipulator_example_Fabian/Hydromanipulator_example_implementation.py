@@ -7,7 +7,7 @@ import pandas as pd
 import h5py
 from HydroManipulator import HydroManipulator
 
-HYDRO_CONFIG = "../data/raw/conversion-HydroManipulator_example_Fabian/hydroManipulator_config.json"
+HYDRO_CONFIG = "data/raw/conversion-HydroManipulator_example_Fabian/hydroManipulator_config.json"
 
 def main():
     # Initialize HydroManipulator Class

@@ -1,4 +1,3 @@
-# Import Packages
 import os
 import sys
 from datetime import datetime, timedelta
@@ -6,7 +5,10 @@ import numpy as np
 import pandas as pd
 import h5py
 from HydroManipulator import HydroManipulator
-from noaa_api import noaa_api 
+from noaa_api import noaa_api
+
+# Define Input JSON
+HYDRO_CONFIG = "data/raw/HydroManipulator_example_Fabian/hydroManipulator_config.json"
 
 def parse_hour_float(hour_float):
     """Parses a float hour (e.g. 12.5) into hours, minutes, seconds."""
@@ -137,15 +139,13 @@ def process_single_storm(hm, storm_id, data, adcirc_h5, wave_h5, group_ids, grou
     return data
 
 def main():
-    # Define Input JSON
-    hydro_config = "hydroManipulator_config.json" #"../data/raw/HydroManipulator_example_Fabian/hydroManipulator_config.json"
 
     # Initialize HydroManipulator Class
-    if not os.path.exists(hydro_config):
-        print(f"Error: Configuration file '{hydro_config}' not found.")
+    if not os.path.exists(HYDRO_CONFIG):
+        print(f"Error: Configuration file '{HYDRO_CONFIG}' not found.")
         sys.exit(1)
 
-    hm = HydroManipulator(hydro_config)
+    hm = HydroManipulator(HYDRO_CONFIG)
     tide_api = noaa_api(hm.config["tide_config"])
 
     # Validate Paths
@@ -243,7 +243,7 @@ def main():
             Example:
             processed_data["water_elevation"] = hm.add_slr(processed_data["water_elevation"], ...)
             '''
-            # 
+            #
             if hm.config["add_tides"] == 'True':
                 # Get Hydrograph Start/End
                 tide_api.config["start_date"] = processed_data["date"][0].strftime("%Y%m%d")

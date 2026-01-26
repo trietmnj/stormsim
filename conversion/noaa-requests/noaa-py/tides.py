@@ -13,7 +13,7 @@ STATION_IDS = ["9414290"]
 START_DATE = "2023-01-01"
 END_DATE = "2027-01-31"
 DATUM = "MSL"
-SAVE_FOLDER = "../data/intermediate/noaa-requests/"
+SAVE_FOLDER = "data/intermediate/noaa-requests/"
 
 
 def main():

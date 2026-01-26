@@ -25,7 +25,7 @@ def main():
     station_list = noaapy.station_list.build(station_list_build_cfg)
     stations: dict[str,dict] = {s["id"]: s for s in station_list}
 
-    save_path = "../data/intermediate/noaa-requests/stations.json"
+    save_path = "data/intermediate/noaa-requests/stations.json"
     with open(save_path, "w", encoding="utf-8") as f:
         json.dump(stations, f)
 

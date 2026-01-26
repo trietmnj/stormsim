@@ -8,7 +8,7 @@ from et.HydroManipulator import HydroManipulator
 from et.runup_and_ot_eurotop_2018_mod import runup_and_ot_eurotop_2018
 from et import utils
 
-EURO_CONFIG = "../data/raw/conversion-eurotop/eurotop_run_config.json"
+EURO_CONFIG = "data/raw/conversion-eurotop/eurotop_run_config.json"
 OUTPUT_COL_ORDER_RESPONSES = [
     "date", "lifecycle", "storm_id", "runup", "overtopping_rate",
     "overtopping_volume"
