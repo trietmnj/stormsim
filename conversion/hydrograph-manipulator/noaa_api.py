@@ -21,7 +21,11 @@ class noaa_api:
         Load configuration from JSON file.
         """
         with open(config_path, 'r') as f:
-            self.config = json.load(f)[0]  # assuming single dict in list
+            data = json.load(f)
+            if isinstance(data, list):
+                self.config = data[0]
+            else:
+                self.config = data
 
     def _fetch_url(self, url, is_json=False, retries=8, pause_time=5):
         """

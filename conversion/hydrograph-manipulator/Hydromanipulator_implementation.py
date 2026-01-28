@@ -356,11 +356,11 @@ def main():
 
             # Date formatting for filename
             try:
-                date_str = str(row['date'][0]).replace(" ", "_").replace(":", "")
+                date_str = str(row['date'][0]).replace(" ", "-").replace(":", "")
             except (IndexError, TypeError):
                 date_str = "UNKNOWN_DATE"
 
-            filename = f"LC_{row['lifecycle']}_stormID_{row['storm_id']}_TC_{date_str}UTC.csv"
+            filename = f"LC-{row['lifecycle']}_{date_str}UTC_stormID-{row['storm_id']}_TC.csv"
             hm.write_dict_to_csv(row, os.path.join(output_dir, filename))
 
     print("Processing complete.")

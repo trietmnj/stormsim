@@ -119,17 +119,27 @@ def compute_storm_response(stm, args, pse_config, s_v_file):
 # ---------------------------------------------------------
 def process_lc_file(lc_file, config, pse_config, s_v_file, hm, outfol):
     fname = os.path.basename(lc_file)
+    name_no_ext, ext = os.path.splitext(fname)
+    parts = name_no_ext.split('_')
+
+    # Transform filename from: LC_0_stormID_5_TC_2043-08-20_020151UTC
+    # to: LC-0_2043-08-20-020151UTC_stormID-5_TC
+    if len(parts) >= 7:
+        new_base = f"{parts[0]}-{parts[1]}_{parts[5]}-{parts[6]}_{parts[2]}-{parts[3]}_{parts[4]}"
+        new_fname = new_base + ext
+    else:
+        new_fname = fname
 
     lc_data = pd.read_csv(lc_file)
     args = pse_config.copy()
 
     outname_responses = os.path.join(
         outfol,
-        fname.replace(".csv", "_responses.csv")
+        "response_" + new_fname
     )
     outname_stage = os.path.join(
         outfol,
-        fname.replace(".csv", "_stage.csv")
+        "stage_" + new_fname
     )
 
 

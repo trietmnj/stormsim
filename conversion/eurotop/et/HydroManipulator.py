@@ -23,13 +23,17 @@ class HydroManipulator:
         Load configuration from JSON file.
         """
         with open(config_path, 'r') as f:
-            self.config = json.load(f)[0]  # assuming single dict in list
+            data = json.load(f)
+            if isinstance(data, list):
+                self.config = data[0]
+            else:
+                self.config = data
 
     def add_slr(self, data_in, adjustment):
         """
         Apply sea level rise adjustment if enabled in config.
         """
-        if self.config.get("add_slr", ["False"])[0] == "True":
+        if str(self.config.get("add_slr", "False")) == "True":
             pass
         return np.array(data_in)
 
@@ -37,7 +41,7 @@ class HydroManipulator:
         """
         Apply tidal adjustment if enabled in config.
         """
-        if self.config.get("add_tides", ["False"])[0] == "True":
+        if str(self.config.get("add_tides", "False")) == "True":
             pass
         return np.array(data_in)
 
@@ -45,7 +49,7 @@ class HydroManipulator:
         """
         Apply depth limitation if enabled in config.
         """
-        if self.config.get("add_depth_limitation", ["False"])[0] == "True":
+        if str(self.config.get("add_depth_limitation", "False")) == "True":
             pass
         return np.array(data_in)
 
