@@ -4,18 +4,8 @@
 **egg-info/
 uv.lock
 
-data/finished/
-data/intermediate/
-data/raw/*
-!data/raw/conversion-lifecycle-generation/
-!data/raw/conversion-HydroManipulator_example_Fabian/
-data/raw/conversion-HydroManipulator_example_Fabian/*/
-!data/raw/conversion-eurotop/
-data/raw/conversion-eurotop/*/
-
-**python_outputs**
-
-mock-plugin/cc-py-sdk/
-mock-plugin/seed/
+data/outputs/**
+data/chs-files/hdf5-examples/*
+data/chs-files/regional-files/CHS-NA_nodes_metadata.csv
 
 *.mat
