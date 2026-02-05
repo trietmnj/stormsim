@@ -104,3 +104,114 @@ class HydroManipulator:
         yq = f(tq_sec)
         return yq
 
+    def wavenum(self, T, depth, grav):
+        """
+        Solves linear wave theory dispersion relation for wave number k = 2pi/L.
+        
+        Args:
+            T (np.array): Wave period (s)
+            depth (float or np.array): Water depth (m). Can be scalar or array matching T.
+            grav (float): Acceleration of gravity (m/s^2)
+        """
+        # Ensure T is an array
+        T = np.asarray(T, dtype=float)
+        
+        # Logic to turn scalar depth into array matching T
+        depth = np.asarray(depth, dtype=float)
+        if depth.ndim == 0:
+            depth = np.full_like(T, depth)
+        
+        TOL = 1.0e-5
+        fq = 1.0 / T
+        
+        # Initial guess
+        WHSQ = (depth / grav) * (2 * np.pi * fq)**2
+        X1 = np.where(WHSQ > 1.0, WHSQ, np.sqrt(WHSQ))
+        
+        # Initialize correction array
+        CORR = np.full_like(X1, 1.0)
+        
+        # Optimization: Pre-check limits
+        deep_mask = np.tanh(X1) > (1.0 - TOL)
+        shallow_mask = np.abs(X1 - np.tanh(X1)) < TOL
+        CORR[deep_mask | shallow_mask] = 0.0
+        
+        iter_count = 0
+        max_iter = 100
+        error_flag = 1
+        
+        # Newton-Raphson Loop
+        while np.any(np.abs(CORR) > TOL) and iter_count < max_iter:
+            mask = np.abs(CORR) > TOL
+            
+            X_active = X1[mask]
+            W_active = WHSQ[mask]
+            
+            tanh_X = np.tanh(X_active)
+            cosh_X = np.cosh(X_active)
+            
+            numer = X_active * tanh_X - W_active
+            denom = tanh_X + X_active / (cosh_X**2)
+            
+            # Slope check
+            valid_slope = np.abs(denom) >= TOL
+            if not np.all(valid_slope):
+                error_flag = 0
+                
+            delta = np.zeros_like(X_active)
+            delta[valid_slope] = numer[valid_slope] / denom[valid_slope]
+            
+            X1[mask] -= delta
+            CORR[mask] = delta
+            iter_count += 1
+            
+        km = X1 / depth
+
+        # Empirical Estimate
+        arg = (2 * np.pi / T) * np.sqrt(depth / grav)
+        A = (grav * T**2) / (2 * np.pi)
+        wavelen = A * (1 - np.exp(-(arg**2.5)))**0.4
+        kmest = (2 * np.pi) / wavelen
+        
+        return km, kmest, error_flag
+
+    def add_depth_limitation(self, Hm0, Tp, h, g):
+        """
+        Limits wave height based on depth using empirical breaker index.
+        
+        Args:
+            Hm0 (np.array): Significant wave height
+            Tp (np.array): Peak wave period
+            h (float or np.array): Water depth (scalar or matching array)
+            g (float): Gravity constant
+        """
+        # 1. Handle Scalar Depth: Repeat input value if scalar
+        # We rely on Tp to determine the target shape
+        h = np.asarray(h, dtype=float)
+        if h.ndim == 0:
+            h = np.full_like(Tp, h)
+
+        # 2. Compute Wave Number
+        # Now h is guaranteed to be an array matching Tp
+        km, _, _ = wavenum(Tp, h, g)
+        
+        # 3. Compute Depth Limited Waves
+        # K_b is set to 1.0 as per your MATLAB code
+        K_b = 1.0
+        wavelength = (2 * np.pi) / km
+        
+        # Formula: K_b * 0.1 * L * tanh(kh)
+        depth_limited_waves = K_b * 0.1 * wavelength * np.tanh(km * h)
+        
+        # 4. Handle Negative/Invalid Depth Artifacts
+        # If the limit comes out negative (due to negative depth input), revert to original Hm0
+        invalid_mask = depth_limited_waves <= 0
+        depth_limited_waves[invalid_mask] = Hm0[invalid_mask]
+        
+        # 5. Apply the Limit
+        # Create copy to avoid modifying input in-place
+        out_Hm0 = np.copy(Hm0)
+        limit_mask = out_Hm0 > depth_limited_waves
+        out_Hm0[limit_mask] = depth_limited_waves[limit_mask]
+        
+        return out_Hm0, depth_limited_waves
