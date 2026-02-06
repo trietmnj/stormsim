@@ -3,20 +3,11 @@ import sys
 import json
 import logging
 from datetime import datetime
-from typing import Dict, List, Tuple, Any, Optional
+from typing import Tuple, Any, Optional
 
 import numpy as np
 import pandas as pd
 import h5py
-
-# Add To Path (this is temporary, ensures main.py can run in current hierarchy)
-# 1. Get the path to current file (main.py)
-current_dir = os.path.dirname(os.path.abspath(__file__))
-# 2. Go UP one level to 'project_root'
-project_root = os.path.dirname(current_dir)
-# 3. Add root to path
-sys.path.append(project_root)
-
 # --- Custom Imports ---
 from classes.hydrograph_manipulator.HydroManipulator import HydroManipulator
 from classes import noaa_py
@@ -25,8 +16,9 @@ from classes.utilities.chs_utils import list_h5_files, chs_wave_model_header_loc
 from classes.utilities.csv_utils import write_dict_to_csv, write_dicts_to_csv
 
 # --- Configuration Constants ---
-HYDRO_CONFIG_PATH = "../config-files/hydroManipulator_config.json"
-CHS_META_DIR = "../data/chs-files/regional-files/"
+HYDRO_CONFIG_PATH = "config-files/hydroManipulator_config.json"
+CHS_META_DIR = "data/chs-files/regional-files/"
+GRAVITY_CONSTANT = 9.81 # m/s^2 CHS Data Is m, s, deg
 
 # Set up simple logging
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
@@ -163,8 +155,7 @@ def main():
     
     # Load Sub-Configs
     try:
-        tides_raw = load_json_config(hm.config["tide_config"])
-        tides_config = tides_raw[0] if isinstance(tides_raw, list) else tides_raw
+        tides_config = load_json_config(hm.config["tide_config"])[0]
         lc_data = pd.read_csv(hm.config["lc_path"])
     except Exception as e:
         logging.error(f"Failed loading initial data: {e}")
@@ -217,7 +208,7 @@ def main():
         season_mask_indices = np.searchsorted(np.array(season_trend['month']), lc_data['month'].to_numpy())
         
         tidal_ds = None
-        if hm.config.get("add_tides", False):
+        if hm.config.get("add_tides"):
             tides_config["start_date"] = f"{lc_data['year'].min()}0101"
             tides_config["end_date"] = f"{lc_data['year'].max()}1231"
             tidal_ds = noaa_py.tides.get_tidal_prediction(tides_config)
@@ -241,7 +232,7 @@ def main():
                 processed_data["water_elevation"] += trend_val
                 
                 # -- Tides --
-                if tidal_ds:
+                if hm.config.get("add_tides"):
                     t_start, t_end = processed_data["date"][0], processed_data["date"][-1]
                     tide_time, tide_signal = noaa_py.data_query.filter_tide_data(tidal_ds, t_start, t_end)
                     processed_data["water_elevation"] = hm.add_tides(
@@ -250,6 +241,16 @@ def main():
                         tide_signal, 
                         tide_time
                     )
+                
+                # Depth Limited Waves
+                if hm.config.get("add_depth_limitation"):
+                    # Compute Water Depth (h)
+                    h = processed_data["water_elevation"] + depth 
+                    # Adjust Waves That Meet Criteria
+                    processed_data["wave_height"], _ 
+                    a = hm.add_depth_limitation(processed_data["wave_height"],
+                                             processed_data["wave_peak_period"],
+                                               h, GRAVITY_CONSTANT)
                 
                 # Update record in place
                 stm_records[i] = processed_data

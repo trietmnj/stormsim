@@ -4,13 +4,6 @@ import pandas as pd
 import os
 import sys
 import warnings
-# Add To Path (this is temporary, ensures main.py can run in current hierarchy)
-# 1. Get the path to current file (main.py)
-current_dir = os.path.dirname(os.path.abspath(__file__))
-# 2. Go UP one level to 'project_root'
-project_root = os.path.dirname(current_dir)
-# 3. Add root to path
-sys.path.append(project_root)
 # Import StormSim Packages
 from classes.eurotop.runup_and_ot_eurotop_2018 import runup_and_ot_eurotop_2018
 from classes.utilities.csv_utils import split_df_on_zero, write_dict_to_csv, write_dicts_to_csv
@@ -38,7 +31,7 @@ def resolve_input_paths(config):
     raise FileNotFoundError(f"Invalid lc_data path: {lc_path}")
 
 #----------------- INPUTS FOR MAIN.PY ----------------------
-EURO_CONFIG = "../config-files/eurotop_run_config.json"
+EURO_CONFIG = "config-files/eurotop_run_config.json"
 OUTPUT_COL_ORDER = [
     "date", "storm_id", "lifecycle", "runup", "overtopping_rate",
     "overtopping_volume", "stage"

@@ -7,15 +7,7 @@ from tqdm.auto import tqdm
 # Temp
 import os
 import sys
-# Add To Path (this is temporary, ensures main.py can run in current hierarchy)
-# 1. Get the path to current file (main.py)
-current_dir = os.path.dirname(os.path.abspath(__file__))
-# 2. Go UP one level to 'project_root'
-project_root = os.path.dirname(current_dir)
-# 3. Add root to path
-sys.path.append(project_root)
-#
-from classes import lcgen
+from . import utils
 
 # simulate_lifecycle → _sample_year_events → (_sample_yearly_storm_count & _sample_layout_with_min_sep → _sample_day_of_year)
 
@@ -70,7 +62,7 @@ def simulate_lifecycle(
         idx_id = np.searchsorted(storm_set["cdf"], u_id, side="right")
         sid = storm_set["storm_id"].to_numpy()[idx_id]
         rcdf = storm_set["cdf"].to_numpy()[idx_id]
-        month, day = lcgen.utils.doy_to_month_day(year, doy)
+        month, day = utils.doy_to_month_day(year, doy)
 
         for k in range(n_kept):
             records.append(

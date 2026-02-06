@@ -4,13 +4,6 @@ import pandas as pd
 import os
 import sys
 
-# Add To Path (this is temporary, ensures main.py can run in current hierarchy)
-# 1. Get the path to current file (main.py)
-current_dir = os.path.dirname(os.path.abspath(__file__))
-# 2. Go UP one level to 'project_root'
-project_root = os.path.dirname(current_dir)
-# 3. Add root to path
-sys.path.append(project_root)
 # Import StormSim Packages
 from classes import lcgen
 
@@ -26,11 +19,11 @@ LAM_TARGET = 1.7  # local storm recurrence rate (Poisson lambda)
 MIN_ARRIVAL_TROP_DAYS = 7.0
 MIN_ARRIVAL_EXTRA_DAYS = 4.0  # not used yet, but kept for future
 
-REL_PROB_FILE = "../data/lcgen/Relative_probability_bins_Atlantic 4.csv"
+REL_PROB_FILE = "data/lcgen/Relative_probability_bins_Atlantic 4.csv"
 STORM_ID_PROB_FILE = (
-    "../data/chs-files/regional-files/CHS-NA_Master_Track_Table.csv"
+    "data/chs-files/regional-files/CHS-NA_Master_Track_Table.csv"
 )
-OUTPUT_DIRECTORY = Path("../data/outputs/lcgen")
+OUTPUT_DIRECTORY = Path("data/outputs/lcgen")
 
 RNG = np.random.default_rng()  # consistent RNG
 PROFILE = False  # set to True to enable cProfile profiling
