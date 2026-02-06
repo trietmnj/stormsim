@@ -241,21 +241,16 @@ def main():
                         tide_signal,
                         tide_time
                     )
-<<<<<<< HEAD
                 
                 # Depth Limited Waves
                 if hm.config.get("add_depth_limitation"):
                     # Compute Water Depth (h)
                     h = processed_data["water_elevation"] + depth 
                     # Adjust Waves That Meet Criteria
-                    processed_data["wave_height"], _ 
-                    a = hm.add_depth_limitation(processed_data["wave_height"],
+                    processed_data["wave_height"], _ = hm.add_depth_limitation(processed_data["wave_height"],
                                              processed_data["wave_peak_period"],
                                                h, GRAVITY_CONSTANT)
                 
-=======
-
->>>>>>> 37211488f53cc1a5f77db13772930c5204a4f1d0
                 # Update record in place
                 stm_records[i] = processed_data
 
