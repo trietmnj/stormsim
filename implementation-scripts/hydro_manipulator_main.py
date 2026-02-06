@@ -3,7 +3,7 @@ import sys
 import json
 import logging
 from datetime import datetime
-from typing import Dict, List, Tuple, Any, Optional
+from typing import Tuple, Any, Optional
 
 import numpy as np
 import pandas as pd
@@ -42,17 +42,17 @@ def extract_h5_lat_lon(h5_obj: h5py.File) -> Tuple[float, float]:
     """Extracts latitude and longitude from H5 attributes flexibly."""
     try:
         # One-liner to find keys containing 'latitude'/'longitude' but not 'units'
-        lat_val = next(h5_obj.attrs[k] for k in h5_obj.attrs 
+        lat_val = next(h5_obj.attrs[k] for k in h5_obj.attrs
                        if 'latitude' in k.lower() and 'units' not in k.lower())
-        lon_val = next(h5_obj.attrs[k] for k in h5_obj.attrs 
+        lon_val = next(h5_obj.attrs[k] for k in h5_obj.attrs
                        if 'longitude' in k.lower() and 'units' not in k.lower())
-        
+
         # Convert bytes to float if necessary
         if isinstance(lat_val, (bytes, np.bytes_)):
             lat_val = lat_val.decode('utf-8')
         if isinstance(lon_val, (bytes, np.bytes_)):
             lon_val = lon_val.decode('utf-8')
-            
+
         return float(lat_val), float(lon_val)
     except StopIteration:
         raise ValueError("Could not find Latitude/Longitude attributes in H5 file.")
@@ -62,19 +62,19 @@ def get_node_metadata(region: str, lat: float, lon: float) -> Tuple[float, float
     meta_path = os.path.join(CHS_META_DIR, f"{region}_nodes_metadata.csv")
     if not os.path.exists(meta_path):
         raise FileNotFoundError(f"Regional metadata not found: {meta_path}")
-        
+
     chs_grid = pd.read_csv(meta_path)
-    
+
     # Returns row index of nearest point
     # Note: find_nearest_latlon returns a tuple, index 4 is the row index in your utility
     nearest_info = find_nearest_latlon(
-        lat, lon, 
-        chs_grid["lat"].to_numpy(), 
-        chs_grid["lon"].to_numpy(), 
+        lat, lon,
+        chs_grid["lat"].to_numpy(),
+        chs_grid["lon"].to_numpy(),
         max_radius_km=None
     )
     grd_row = nearest_info[4]
-    
+
     return (
         chs_grid["Ba"].to_numpy()[grd_row],
         chs_grid["Br"].to_numpy()[grd_row],
@@ -82,13 +82,13 @@ def get_node_metadata(region: str, lat: float, lon: float) -> Tuple[float, float
     )
 
 def process_single_storm(
-    hm: HydroManipulator, 
-    storm_id: int, 
-    data: dict, 
-    adcirc_h5: h5py.File, 
-    wave_h5: h5py.File, 
-    group_ids: np.ndarray, 
-    groups: np.ndarray, 
+    hm: HydroManipulator,
+    storm_id: int,
+    data: dict,
+    adcirc_h5: h5py.File,
+    wave_h5: h5py.File,
+    group_ids: np.ndarray,
+    groups: np.ndarray,
     wave_headers: dict
 ) -> Optional[dict]:
     """
@@ -160,7 +160,7 @@ def main():
         sys.exit(1)
 
     hm = HydroManipulator(HYDRO_CONFIG_PATH)
-    
+
     # Load Sub-Configs
     try:
         tides_raw = load_json_config(hm.config["tide_config"])
@@ -196,7 +196,7 @@ def main():
     wave_path = os.path.join(hm.config["node_data_path"], wave_files[0])
 
     with h5py.File(adcirc_path, 'r') as adcirc_h5, h5py.File(wave_path, 'r') as wave_h5:
-        
+
         # A. Get Metadata & Bias
         sp_lat, sp_lon = extract_h5_lat_lon(adcirc_h5)
         Ba, Br, depth = get_node_metadata(region, sp_lat, sp_lon)
@@ -215,7 +215,7 @@ def main():
         # C. Prep Tides & Trends
         season_trend = noaa_py.seasonal_cycle.get_station_seasonal_trend(tides_config["station"])
         season_mask_indices = np.searchsorted(np.array(season_trend['month']), lc_data['month'].to_numpy())
-        
+
         tidal_ds = None
         if hm.config.get("add_tides", False):
             tides_config["start_date"] = f"{lc_data['year'].min()}0101"
@@ -235,22 +235,22 @@ def main():
             if processed_data:
                 # -- Bias Correction --
                 processed_data["water_elevation"] = hm.correct_bias(processed_data["water_elevation"], Ba, Br)
-                
+
                 # -- Steric Adjustment --
                 trend_val = season_trend['upper_ci'][season_mask_indices[i]]
                 processed_data["water_elevation"] += trend_val
-                
+
                 # -- Tides --
                 if tidal_ds:
                     t_start, t_end = processed_data["date"][0], processed_data["date"][-1]
                     tide_time, tide_signal = noaa_py.data_query.filter_tide_data(tidal_ds, t_start, t_end)
                     processed_data["water_elevation"] = hm.add_tides(
-                        processed_data["water_elevation"], 
-                        processed_data["date"], 
-                        tide_signal, 
+                        processed_data["water_elevation"],
+                        processed_data["date"],
+                        tide_signal,
                         tide_time
                     )
-                
+
                 # Update record in place
                 stm_records[i] = processed_data
 
@@ -267,7 +267,7 @@ def main():
 
     # Write
     write_single = str(hm.config.get("write_single_file", "False")).lower() == "true"
-    
+
     if write_single:
         out_file = os.path.join(hm.config["outpath"], f"{lc_name_base}.csv")
         logging.info(f"Writing single file: {out_file}")
@@ -277,7 +277,7 @@ def main():
         for row in stm_records:
             if not all(k in row for k in ["lifecycle", "storm_id", "date"]):
                 continue
-                
+
             try:
                 date_str = str(row['date'][0]).replace(" ", "_").replace(":", "")
             except (IndexError, TypeError):

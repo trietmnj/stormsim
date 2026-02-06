@@ -8,14 +8,6 @@ dependencies = [
     "h5py",
     "scipy",
     "tqdm",
-    "os",
-    "sys",
-    "datetime",
-    "glob",
-    "csv",
-    "collections",
-    "json",
-    "scipy"
 ]
 requires-python = ">=3.8"
 
