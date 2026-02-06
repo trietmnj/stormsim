@@ -179,13 +179,8 @@ class HydroManipulator:
 
         # 2. Compute Wave Number
         # Now h is guaranteed to be an array matching Tp
-<<<<<<< HEAD
         km, _, _ = self.wavenum(Tp, h, g)
         
-=======
-        km, _, _ = wavenum(Tp, h, g)
-
->>>>>>> 37211488f53cc1a5f77db13772930c5204a4f1d0
         # 3. Compute Depth Limited Waves
         # K_b is set to 1.0 as per your MATLAB code
         K_b = 1.0
