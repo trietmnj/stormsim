@@ -1,12 +1,6 @@
 import json
 import numpy as np
-import pandas as pd
 from scipy.interpolate import interp1d
-import os
-import glob
-from datetime import datetime, timedelta
-from collections.abc import Iterable
-import csv
 
 class HydroManipulator:
     def __init__(self, config_path=None):
@@ -65,14 +59,6 @@ class HydroManipulator:
         data_with_tides = data_in + interp_tide
 
         return data_with_tides
-
-    def add_depth_limitation(self, data_in, adjustment):
-        """
-        Apply depth limitation if enabled in config.
-        """
-        if self.config.get("add_depth_limitation", ["False"])[0] == "True":
-            pass
-        return np.array(data_in)
 
     def interp_hydrograph(self, y, t, tq):
         """
@@ -193,7 +179,7 @@ class HydroManipulator:
 
         # 2. Compute Wave Number
         # Now h is guaranteed to be an array matching Tp
-        km, _, _ = wavenum(Tp, h, g)
+        km, _, _ = self.wavenum(Tp, h, g)
         
         # 3. Compute Depth Limited Waves
         # K_b is set to 1.0 as per your MATLAB code
