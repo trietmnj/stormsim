@@ -228,7 +228,7 @@ def main():
                 processed_data["water_elevation"] = hm.correct_bias(processed_data["water_elevation"], Ba, Br)
 
                 # -- Steric Adjustment --
-                trend_val = season_trend['upper_ci'][season_mask_indices[i]]
+                trend_val = season_trend['level'][season_mask_indices[i]]
                 processed_data["water_elevation"] += trend_val
 
                 # -- Tides --
