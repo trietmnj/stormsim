@@ -33,19 +33,39 @@ The project uses a standard Python environment.
 
 ### Installation
 ```bash
-pip install -r requirements.txt
-```
-
-### Running Lifecycle Generation
-```bash
-python implementation-scripts/lc_generator_main.py
+uv sync
 ```
 
 ### Dependencies
-- `numpy`, `pandas`, `h5py`, `scipy`, `tqdm` (Core)
-- Planned: `duckdb`, `boto3`, `s3fs` (Storage & Data Abstraction)
+- `numpy`, `pandas`, `h5py`, `scipy`, `tqdm` (Core Simulation)
+- `duckdb` (Data Ingestion & Abstraction)
+- `boto3`, `s3fs` (S3/MinIO Storage)
+- `python-dotenv` (Environment Management)
+
+### Running Lifecycle Generation
+The lifecycle generator now supports JSON-based configuration and can target either local storage or an S3/MinIO bucket.
+
+**Local Execution (Default):**
+```bash
+uv run implementation-scripts/lc_generator_main.py --config data/lcgen/config_local.json
+```
+
+**S3/MinIO Execution:**
+```bash
+uv run implementation-scripts/lc_generator_main.py --config data/lcgen/config_s3.json
+```
+
+### Configuration Options (`data/lcgen/*.json`)
+- `inputs`:
+    - `use_duckdb`: (bool) Enable DuckDB for fast CSV ingestion.
+    - `use_s3`: (bool) If true, DuckDB will read input files from S3 using `s3_config`.
+- `outputs`:
+    - `storage_type`: `"local"` or `"s3"`.
+    - `s3_bucket`: Destination bucket name.
+    - `s3_prefix`: Directory prefix within the bucket.
+- `s3_config`: Credentials and endpoint for MinIO/S3.
 
 ## Development Conventions
-- **Configuration**: Prefer JSON configuration files in `config-files/`.
-- **Data Paths**: Use the `@data/lcgen/**` structure for lifecycle-related data to separate data from code.
-- **Modularity**: Logic should reside in `classes/`, with `implementation-scripts/` acting as thin drivers.
+- **Configuration**: Store stage-specific configs in their respective data directories (e.g., `data/lcgen/config_*.json`).
+- **Data Abstraction**: Use DuckDB for reading tabular data to allow seamless switching between local files and S3.
+- **Environment**: Use `uv` for environment management and `uv run` for execution.
