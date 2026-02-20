@@ -1,6 +1,10 @@
 import json
+import argparse
 from pathlib import Path
+import numpy as np
 import pandas as pd
+import os
+import sys
 from typing import Dict
 
 # Import StormSim Packages
@@ -9,20 +13,22 @@ from classes import lcgen
 # -----------------------------
 # CONFIG LOADING
 # -----------------------------
-CONFIG_PATH = Path("data/lcgen/config.json")
-
+DEFAULT_CONFIG = Path("data/lcgen/config_local.json")
 
 def load_config(path: Path) -> Dict:
+    if not path.exists():
+        print(f"Error: Config file {path} not found.")
+        sys.exit(1)
     with open(path, "r") as f:
         return json.load(f)
-
 
 # -----------------------------
 # MAIN DRIVER
 # -----------------------------
-def main():
-    config = load_config(CONFIG_PATH)
-
+def main(config_path: Path):
+    config = load_config(config_path)
+    print(f"Using config: {config_path}")
+    
     # Simulation Params
     sim_params = config["simulation_params"]
     init_year = sim_params["initialize_year"]
@@ -36,14 +42,14 @@ def main():
     use_duckdb = inputs.get("use_duckdb", False)
     rel_prob_file = inputs["rel_prob_file"]
     storm_id_file = inputs["storm_id_prob_file"]
-
+    
     # Storage and S3 settings
     s3_config_raw = config.get("s3_config", {})
     s3_config = {
         "use_s3": inputs.get("use_s3", False),
         "s3_endpoint": s3_config_raw.get("endpoint"),
         "s3_access_key": s3_config_raw.get("access_key"),
-        "s3_secret_key": s3_config_raw.get("secret_key"),
+        "s3_secret_key": s3_config_raw.get("secret_key")
     }
 
     # Load Data
@@ -90,17 +96,15 @@ def main():
     outputs = config["outputs"]
     output_filename = outputs["filename"]
     storage_type = outputs.get("storage_type", "local")
-
+    
     if storage_type == "s3":
-        s3_path = (
-            f"s3://{outputs['s3_bucket']}/{outputs['s3_prefix']}/{output_filename}"
-        )
+        s3_path = f"s3://{outputs['s3_bucket']}/{outputs['s3_prefix']}/{output_filename}"
         storage_options = {
             "key": s3_config_raw.get("access_key"),
             "secret": s3_config_raw.get("secret_key"),
-            "client_kwargs": {"endpoint_url": s3_config_raw.get("endpoint")},
+            "client_kwargs": {"endpoint_url": s3_config_raw.get("endpoint")}
         }
-        print(f"Writing output to {s3_path}")
+        print(f"Writing output to {s3_path}...")
         data.to_csv(s3_path, index=False, storage_options=storage_options)
     else:
         out_dir = Path(outputs["local_directory"])
@@ -120,7 +124,17 @@ def main():
 
 
 if __name__ == "__main__":
-    config = load_config(CONFIG_PATH)
+    parser = argparse.ArgumentParser(description="Lifecycle Generator Main Script")
+    parser.add_argument(
+        "--config", 
+        type=str, 
+        default=str(DEFAULT_CONFIG),
+        help=f"Path to the JSON config file (default: {DEFAULT_CONFIG})"
+    )
+    args = parser.parse_args()
+    config_path = Path(args.config)
+
+    config = load_config(config_path)
     if config["runtime"].get("profile", False):
         import cProfile
         import pstats
@@ -129,7 +143,7 @@ if __name__ == "__main__":
         pr = cProfile.Profile()
         pr.enable()
 
-        main()
+        main(config_path)
 
         pr.disable()
         s = io.StringIO()
@@ -137,4 +151,4 @@ if __name__ == "__main__":
         ps.print_stats(40)
         print(s.getvalue())
     else:
-        main()
+        main(config_path)
