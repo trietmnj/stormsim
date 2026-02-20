@@ -3,3 +3,7 @@ pandas
 h5py
 scipy
 tqdm
+duckdb
+boto3
+s3fs
+python-dotenv

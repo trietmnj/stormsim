@@ -8,6 +8,10 @@ dependencies = [
     "h5py",
     "scipy",
     "tqdm",
+    "duckdb",
+    "boto3",
+    "s3fs",
+    "python-dotenv",
 ]
 requires-python = ">=3.8"
 
