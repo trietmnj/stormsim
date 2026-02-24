@@ -8,4 +8,14 @@ data/outputs/**
 data/chs-files/hdf5-examples/*
 data/chs-files/regional-files/CHS-NA_nodes_metadata.csv
 
+# Data directories
+data/intermediate/
+data/raw/
+
+# Mock-plugin seed data and SDK
+mock-plugin/cc-py-sdk/
+mock-plugin/seed/*.tif
+mock-plugin/seed/*.gpkg
+mock-plugin/seed/damage-functions.json
+
 *.mat
