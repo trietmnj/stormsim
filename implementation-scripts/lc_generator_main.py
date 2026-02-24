@@ -23,11 +23,10 @@ def load_config(path: Path) -> Dict:
         return json.load(f)
 
 # -----------------------------
-# MAIN DRIVER
+# CORE LOGIC
 # -----------------------------
-def main(config_path: Path):
-    config = load_config(config_path)
-    print(f"Using config: {config_path}")
+def run_lc_generator(config: Dict):
+    print(f"Running LC Generator...")
     
     # Simulation Params
     sim_params = config["simulation_params"]
@@ -99,28 +98,63 @@ def main(config_path: Path):
     
     if storage_type == "s3":
         s3_path = f"s3://{outputs['s3_bucket']}/{outputs['s3_prefix']}/{output_filename}"
-        storage_options = {
-            "key": s3_config_raw.get("access_key"),
-            "secret": s3_config_raw.get("secret_key"),
-            "client_kwargs": {"endpoint_url": s3_config_raw.get("endpoint")}
-        }
+        
+        storage_options = {}
+        if s3_config_raw.get("access_key"):
+            storage_options["key"] = s3_config_raw["access_key"]
+        if s3_config_raw.get("secret_key"):
+            storage_options["secret"] = s3_config_raw["secret_key"]
+        if s3_config_raw.get("endpoint"):
+            storage_options["client_kwargs"] = {"endpoint_url": s3_config_raw["endpoint"]}
+            
         print(f"Writing output to {s3_path}...")
-        data.to_csv(s3_path, index=False, storage_options=storage_options)
+        data.to_csv(s3_path, index=False, storage_options=storage_options if storage_options else None)
+        output_result = s3_path
     else:
         out_dir = Path(outputs["local_directory"])
         out_dir.mkdir(parents=True, exist_ok=True)
         local_path = out_dir / output_filename
         print(f"Writing output to {local_path}...")
         data.to_csv(local_path, index=False)
+        output_result = str(local_path)
 
     # Validation
-    if config["runtime"].get("validate_lambda", False):
+    if config.get("runtime", {}).get("validate_lambda", False):
         if all_dfs:
             df_all = pd.concat(all_dfs, ignore_index=True)
             counts = lcgen.validation.compute_storm_counts(df_all)
             lcgen.validation.verify_lambda(counts, lam_target)
         else:
             print("[warn] No lifecycle data generated; skipping lambda validation.")
+            
+    return {"status": "success", "output": output_result}
+
+# -----------------------------
+# MAIN DRIVER
+# -----------------------------
+def main(config_path: Path):
+    config = load_config(config_path)
+    print(f"Using config: {config_path}")
+    
+    if config["runtime"].get("profile", False):
+        import cProfile
+        import pstats
+        import io
+
+        pr = cProfile.Profile()
+        pr.enable()
+
+        result = run_lc_generator(config)
+        print(result)
+
+        pr.disable()
+        s = io.StringIO()
+        ps = pstats.Stats(pr, stream=s).sort_stats("cumtime")
+        ps.print_stats(40)
+        print(s.getvalue())
+    else:
+        result = run_lc_generator(config)
+        print(result)
 
 
 if __name__ == "__main__":
@@ -134,21 +168,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
     config_path = Path(args.config)
 
-    config = load_config(config_path)
-    if config["runtime"].get("profile", False):
-        import cProfile
-        import pstats
-        import io
-
-        pr = cProfile.Profile()
-        pr.enable()
-
-        main(config_path)
-
-        pr.disable()
-        s = io.StringIO()
-        ps = pstats.Stats(pr, stream=s).sort_stats("cumtime")
-        ps.print_stats(40)
-        print(s.getvalue())
-    else:
-        main(config_path)
+    main(config_path)

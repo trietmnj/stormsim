@@ -29,10 +29,20 @@ def load_relative_probabilities(filepath: str, use_duckdb: bool = False, s3_conf
         """
         df = con.query(query).to_df()
     else:
+        storage_options = {}
+        if s3_config:
+            if s3_config.get("s3_access_key"):
+                storage_options["key"] = s3_config["s3_access_key"]
+            if s3_config.get("s3_secret_key"):
+                storage_options["secret"] = s3_config["s3_secret_key"]
+            if s3_config.get("s3_endpoint"):
+                storage_options["client_kwargs"] = {"endpoint_url": s3_config["s3_endpoint"]}
+        
         df = pd.read_csv(
             filepath,
             usecols=["Month", "Day", "Cumulative trop prob"],
             dtype={"Month": int, "Day": int, "Cumulative trop prob": float},
+            storage_options=storage_options if storage_options else None
         ).rename(
             columns={
                 "Month": "month",
@@ -63,8 +73,20 @@ def load_storm_id_cdf(filepath: str, use_duckdb: bool = False, s3_config: Option
         """
         df = con.query(query).to_df()
     else:
+        storage_options = {}
+        if s3_config:
+            if s3_config.get("s3_access_key"):
+                storage_options["key"] = s3_config["s3_access_key"]
+            if s3_config.get("s3_secret_key"):
+                storage_options["secret"] = s3_config["s3_secret_key"]
+            if s3_config.get("s3_endpoint"):
+                storage_options["client_kwargs"] = {"endpoint_url": s3_config["s3_endpoint"]}
+        
         df = pd.read_csv(
-            filepath, usecols=["stormID", "DSW"], dtype={"stormID": int, "DSW": float}
+            filepath, 
+            usecols=["stormID", "DSW"], 
+            dtype={"stormID": int, "DSW": float},
+            storage_options=storage_options if storage_options else None
         ).rename(
             columns={
                 "stormID": "storm_id",
