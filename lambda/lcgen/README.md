@@ -70,14 +70,51 @@ Invoke the Lambda function with a JSON payload that matches the configuration fo
 
 ## Local Testing with Docker
 
-You can test the Lambda function locally using the [AWS Lambda Runtime Interface Emulator](https://docs.aws.amazon.com/lambda/latest/dg/images-test.html):
+You can test the Lambda function locally using the [AWS Lambda Runtime Interface Emulator](https://docs.aws.amazon.com/lambda/latest/dg/images-test.html).
+
+### 1. Start the Container
+Run the container and map port `8080` (the Lambda endpoint) to your local port `9000`:
 
 ```bash
 docker run -p 9000:8080 stormsim-lcg-lambda
 ```
 
-Then invoke it with `curl`:
+### 2. Prepare a Test Payload (`event.json`)
+```json
+{
+  "simulation_params": {
+    "initialize_year": 2025,
+    "lifecycle_duration": 5,
+    "num_lcs": 2,
+    "lam_target": 1.5,
+    "min_arrival_trop_days": 7.0
+  },
+  "inputs": {
+    "use_duckdb": true,
+    "use_s3": false,
+    "rel_prob_file": "data/lcgen/Relative_probability_bins_Atlantic 4.csv",
+    "storm_id_prob_file": "data/chs-files/regional-files/CHS-NA_Master_Track_Table.csv"
+  },
+  "outputs": {
+    "storage_type": "local",
+    "local_directory": "/tmp/outputs",
+    "filename": "local_test_results.csv"
+  },
+  "runtime": {
+    "validate_lambda": true
+  }
+}
+```
+
+### 3. Invoke the Function
+In a new terminal, send the payload:
 
 ```bash
-curl -XPOST "http://localhost:9000/2015-03-31/functions/function/invocations" -d '{"simulation_params": {...}, "inputs": {...}, ...}'
+curl -XPOST "http://localhost:9000/2015-03-31/functions/function/invocations" -d @event.json
 ```
+
+### Iteration Workflow
+1. **Modify Code**: Change logic in `classes/lcgen/` or `lambda/lcgen/lambda_function.py`.
+2. **Rebuild**: `docker build -t stormsim-lcg-lambda -f lambda/lcgen/Dockerfile .`
+3. **Run**: `docker run -p 9000:8080 stormsim-lcg-lambda`
+4. **Invoke**: `curl -XPOST ... -d @event.json`
