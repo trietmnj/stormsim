@@ -1,42 +1,64 @@
+import json
+import argparse
 from pathlib import Path
 import numpy as np
 import pandas as pd
 import os
 import sys
+from typing import Dict
 
 # Import StormSim Packages
 from classes import lcgen
 
 # -----------------------------
-# CONFIG / USER INPUTS
+# CONFIG LOADING
 # -----------------------------
-INITIALIZE_YEAR = 2033
-LIFECYCLE_DURATION = 10  # number of years in a lifecycle
-NUM_LCS = 10  # number of lifecycles
-LAM_TARGET = 1.7  # local storm recurrence rate (Poisson lambda)
+DEFAULT_CONFIG = Path("data/lcgen/config_local.json")
 
-# minimum separation between storms in days
-MIN_ARRIVAL_TROP_DAYS = 7.0
-MIN_ARRIVAL_EXTRA_DAYS = 4.0  # not used yet, but kept for future
-
-REL_PROB_FILE = "data/lcgen/Relative_probability_bins_Atlantic 4.csv"
-STORM_ID_PROB_FILE = (
-    "data/chs-files/regional-files/CHS-NA_Master_Track_Table.csv"
-)
-OUTPUT_DIRECTORY = Path("data/outputs/lcgen")
-
-RNG = np.random.default_rng()  # consistent RNG
-PROFILE = False  # set to True to enable cProfile profiling
-VALIDATE_LAMBDA = False  # set to True to run validation after simulating
-
+def load_config(path: Path) -> Dict:
+    if not path.exists():
+        print(f"Error: Config file {path} not found.")
+        sys.exit(1)
+    with open(path, "r") as f:
+        return json.load(f)
 
 # -----------------------------
 # MAIN DRIVER
 # -----------------------------
-def main():
-    OUTPUT_DIRECTORY.mkdir(parents=True, exist_ok=True)
-    prob_schedule: pd.DataFrame = lcgen.load.load_relative_probabilities(REL_PROB_FILE)
-    storm_set: pd.DataFrame = lcgen.load.load_storm_id_cdf(STORM_ID_PROB_FILE)
+def main(config_path: Path):
+    config = load_config(config_path)
+    print(f"Using config: {config_path}")
+    
+    # Simulation Params
+    sim_params = config["simulation_params"]
+    init_year = sim_params["initialize_year"]
+    duration = sim_params["lifecycle_duration"]
+    num_lcs = sim_params["num_lcs"]
+    lam_target = sim_params["lam_target"]
+    min_sep = sim_params["min_arrival_trop_days"]
+
+    # Input paths/settings
+    inputs = config["inputs"]
+    use_duckdb = inputs.get("use_duckdb", False)
+    rel_prob_file = inputs["rel_prob_file"]
+    storm_id_file = inputs["storm_id_prob_file"]
+    
+    # Storage and S3 settings
+    s3_config_raw = config.get("s3_config", {})
+    s3_config = {
+        "use_s3": inputs.get("use_s3", False),
+        "s3_endpoint": s3_config_raw.get("endpoint"),
+        "s3_access_key": s3_config_raw.get("access_key"),
+        "s3_secret_key": s3_config_raw.get("secret_key")
+    }
+
+    # Load Data
+    prob_schedule: pd.DataFrame = lcgen.load.load_relative_probabilities(
+        rel_prob_file, use_duckdb=use_duckdb, s3_config=s3_config
+    )
+    storm_set: pd.DataFrame = lcgen.load.load_storm_id_cdf(
+        storm_id_file, use_duckdb=use_duckdb, s3_config=s3_config
+    )
 
     # Columns for split outputs
     cols = [
@@ -47,19 +69,18 @@ def main():
         "day",
         "hour",
         "storm_id",
-        # "rcdf",
     ]
 
     all_dfs: list[pd.DataFrame] = []
 
-    # Full simulation using calibrated lambda
-    for lc in range(NUM_LCS):
+    # Full simulation
+    for lc in range(num_lcs):
         df = lcgen.sampling.simulate_lifecycle(
             lifecycle_index=lc,
-            init_year=INITIALIZE_YEAR,
-            duration_years=LIFECYCLE_DURATION,
-            lam=LAM_TARGET,
-            min_sep_days=MIN_ARRIVAL_TROP_DAYS,
+            init_year=init_year,
+            duration_years=duration,
+            lam=lam_target,
+            min_sep_days=min_sep,
             prob_schedule=prob_schedule,
             storm_set=storm_set,
             show_progress=False,
@@ -70,20 +91,51 @@ def main():
         all_dfs.append(df_ids)
 
     data = pd.concat(all_dfs, ignore_index=True)
-    data.to_csv(OUTPUT_DIRECTORY / f"EventDate_LC.csv", index=False)
 
-    if VALIDATE_LAMBDA:
-        # Concatenate all lifecycles for validation (use in-memory frames)
+    # Handle Output
+    outputs = config["outputs"]
+    output_filename = outputs["filename"]
+    storage_type = outputs.get("storage_type", "local")
+    
+    if storage_type == "s3":
+        s3_path = f"s3://{outputs['s3_bucket']}/{outputs['s3_prefix']}/{output_filename}"
+        storage_options = {
+            "key": s3_config_raw.get("access_key"),
+            "secret": s3_config_raw.get("secret_key"),
+            "client_kwargs": {"endpoint_url": s3_config_raw.get("endpoint")}
+        }
+        print(f"Writing output to {s3_path}...")
+        data.to_csv(s3_path, index=False, storage_options=storage_options)
+    else:
+        out_dir = Path(outputs["local_directory"])
+        out_dir.mkdir(parents=True, exist_ok=True)
+        local_path = out_dir / output_filename
+        print(f"Writing output to {local_path}...")
+        data.to_csv(local_path, index=False)
+
+    # Validation
+    if config["runtime"].get("validate_lambda", False):
         if all_dfs:
             df_all = pd.concat(all_dfs, ignore_index=True)
             counts = lcgen.validation.compute_storm_counts(df_all)
-            lcgen.validation.verify_lambda(counts, LAM_TARGET)
+            lcgen.validation.verify_lambda(counts, lam_target)
         else:
             print("[warn] No lifecycle data generated; skipping lambda validation.")
 
 
 if __name__ == "__main__":
-    if PROFILE:
+    parser = argparse.ArgumentParser(description="Lifecycle Generator Main Script")
+    parser.add_argument(
+        "--config", 
+        type=str, 
+        default=str(DEFAULT_CONFIG),
+        help=f"Path to the JSON config file (default: {DEFAULT_CONFIG})"
+    )
+    args = parser.parse_args()
+    config_path = Path(args.config)
+
+    config = load_config(config_path)
+    if config["runtime"].get("profile", False):
         import cProfile
         import pstats
         import io
@@ -91,12 +143,12 @@ if __name__ == "__main__":
         pr = cProfile.Profile()
         pr.enable()
 
-        main()
+        main(config_path)
 
         pr.disable()
         s = io.StringIO()
-        ps = pstats.Stats(pr, stream=s).sort_stats("cumtime")  # or "tottime"
-        ps.print_stats(40)  # top 40 entries
+        ps = pstats.Stats(pr, stream=s).sort_stats("cumtime")
+        ps.print_stats(40)
         print(s.getvalue())
     else:
-        main()
+        main(config_path)

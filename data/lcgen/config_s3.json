@@ -1,0 +1,31 @@
+{
+  "simulation_params": {
+    "initialize_year": 2033,
+    "lifecycle_duration": 10,
+    "num_lcs": 10,
+    "lam_target": 1.7,
+    "min_arrival_trop_days": 7.0
+  },
+  "inputs": {
+    "use_duckdb": true,
+    "use_s3": false,
+    "rel_prob_file": "data/lcgen/Relative_probability_bins_Atlantic 4.csv",
+    "storm_id_prob_file": "data/chs-files/regional-files/CHS-NA_Master_Track_Table.csv"
+  },
+  "outputs": {
+    "storage_type": "s3",
+    "local_directory": "data/outputs/lcgen",
+    "filename": "EventDate_LC.csv",
+    "s3_bucket": "stormsim",
+    "s3_prefix": "lcgen/outputs"
+  },
+  "s3_config": {
+    "endpoint": "http://localhost:7123",
+    "access_key": "AKIAIOSFODNN7EXAMPLE",
+    "secret_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+  },
+  "runtime": {
+    "profile": false,
+    "validate_lambda": false
+  }
+}
