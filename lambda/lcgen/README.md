@@ -74,53 +74,30 @@ Invoke the Lambda function with a JSON payload that matches the configuration fo
 }
 ```
 
-## Local Testing with Docker
+## Local Testing with MinIO (Docker Compose)
 
-You can test the Lambda function locally using the [AWS Lambda Runtime Interface Emulator](https://docs.aws.amazon.com/lambda/latest/dg/images-test.html).
+The easiest way to test S3 integration locally is using Docker Compose, which orchestrates the Lambda container, a MinIO instance, and an automatic data upload step.
 
-### 1. Start the Container
-Run the container and map port `8080` (the Lambda endpoint) to your local port `9000`:
-
+### 1. Start the services
+From the project root, run:
 ```bash
-docker run -p 9000:8080 stormsim-lcg-lambda
+docker-compose -f lambda/docker-compose.yml up --build
 ```
+This will:
+- Start **MinIO** on `http://localhost:9000`.
+- Run a setup container that creates the `stormsim` bucket and uploads your local `data/` folder.
+- Start the **Lambda** function on `http://localhost:8081` (mapping to container port 8080).
 
-### 2. Prepare a Test Payload (`event.json`)
-```json
-{
-  "simulation_params": {
-    "initialize_year": 2025,
-    "lifecycle_duration": 5,
-    "num_lcs": 2,
-    "lam_target": 1.5,
-    "min_arrival_trop_days": 7.0
-  },
-  "inputs": {
-    "use_duckdb": true,
-    "use_s3": false,
-    "rel_prob_file": "data/lcgen/Relative_probability_bins_Atlantic 4.csv",
-    "storm_id_prob_file": "data/chs-files/regional-files/CHS-NA_Master_Track_Table.csv"
-  },
-  "outputs": {
-    "storage_type": "local",
-    "local_directory": "/tmp/outputs",
-    "filename": "local_test_results.csv"
-  },
-  "runtime": {
-    "validate_lambda": true
-  }
-}
-```
-
-### 3. Invoke the Function
-In a new terminal, send the payload:
-
+### 2. Invoke with S3 Payload
+In a new terminal, use the `event_s3.json` payload which points to the MinIO container:
 ```bash
-curl -XPOST "http://localhost:9000/2015-03-31/functions/function/invocations" -d @event.json
+curl -XPOST "http://localhost:8081/2015-03-31/functions/function/invocations" -d @lambda/lcgen/event_s3.json
 ```
+
+*Note: In the payload, the `s3_endpoint` is `http://minio:9000` because the Lambda container communicates with MinIO over the internal Docker network.*
 
 ### Iteration Workflow
 1. **Modify Code**: Change logic in `classes/lcgen/` or `lambda/lcgen/lambda_function.py`.
 2. **Rebuild**: `docker build -t stormsim-lcg-lambda -f lambda/lcgen/Dockerfile .`
-3. **Run**: `docker run -p 9000:8080 stormsim-lcg-lambda`
-4. **Invoke**: `curl -XPOST ... -d @event.json`
+3. **Run**: `docker run -p 8081:8080 stormsim-lcg-lambda`
+4. **Invoke**: `curl -XPOST "http://localhost:8081/2015-03-31/functions/function/invocations" -d @event.json`
