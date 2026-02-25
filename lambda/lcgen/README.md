@@ -4,13 +4,19 @@ This document explains how to package and deploy the Lifecycle Generator to AWS 
 
 ## Repository Organization
 
-- `lambda/lcgen/`: Contains the Lambda-specific files (`lambda_function.py`, `Dockerfile`, `README.md`).
+- `lambda/lcgen/`: Contains the Lambda-specific files:
+  - `lambda_function.py`: The entry point for AWS Lambda.
+  - `Dockerfile`: Container definition based on Python 3.12 (AL2023).
+  - `requirements.txt`: Lambda-specific dependency pins (e.g., `numpy < 2.0.0`).
+  - `README.md`: Deployment instructions.
 - `classes/lcgen/`: Contains the core logic for the Lifecycle Generator.
 - `implementation-scripts/`: Contains the CLI entry point (`lc_generator_main.py`).
 
 ## Deployment Steps
 
 ### 1. Build the Docker Image
+
+The build uses the **official AWS Lambda Python 3.12** base image (`public.ecr.aws/lambda/python:3.12`), which is based on **Amazon Linux 2023**. This environment provides **GCC 11.3**, meeting the build requirements for modern scientific Python packages (e.g., `numpy`, `h5py`).
 
 Run the build from the project root directory, pointing to the Dockerfile in `lambda/lcgen/`:
 

@@ -19,17 +19,26 @@ The workflow follows a linear pipeline:
     - `noaa_py/`: Utilities for NOAA data queries and tidal analysis.
     - `utilities/`: General-purpose utilities (CSV, time, CHS).
 - **`implementation-scripts/`**: Entry points for running different stages of the workflow.
+- **`lambda/lcgen/`**: AWS Lambda deployment package for `lcgen`.
 - **`config-files/`**: JSON configuration files for parameterizing simulations.
 - **`data/`**: Input data (CHS master tracks, probability bins) and output directories.
 
 ## Development Status
-- Currently refactoring `lcgen` to support:
-    - S3/MinIO storage for inputs and outputs.
-    - DuckDB for abstracted data ingestion.
-    - JSON-based configuration management.
+- **Lifecycle Generation (`lcgen`)**:
+    - Refactored to support S3/MinIO storage for inputs and outputs.
+    - Integrated DuckDB for abstracted, high-performance data ingestion.
+    - Implemented AWS Lambda support using a containerized environment.
+- **Hazard Curves**:
+    - Porting MATLAB JPM/PST logic to Python (see `hazard-curves/` directory).
+
+## AWS Lambda Deployment (`lcgen`)
+The Lifecycle Generator can be deployed as a containerized AWS Lambda function.
+- **Base Image**: `public.ecr.aws/lambda/python:3.12` (Amazon Linux 2023).
+- **Toolchain**: Uses AL2023 to provide GCC 11.3, which is required for building modern scientific Python packages (e.g., NumPy, h5py).
+- **Dependency Management**: Uses a dedicated `lambda/lcgen/requirements.txt` with pinned versions (`numpy < 2.0.0`) to ensure stability in the Lambda environment.
 
 ## Building and Running
-The project uses a standard Python environment.
+The project uses a standard Python environment managed by `uv`.
 
 ### Installation
 ```bash
@@ -43,9 +52,9 @@ uv sync
 - `python-dotenv` (Environment Management)
 
 ### Running Lifecycle Generation
-The lifecycle generator now supports JSON-based configuration and can target either local storage or an S3/MinIO bucket.
+The lifecycle generator supports JSON-based configuration and can target either local storage or an S3/MinIO bucket.
 
-**Local Execution (Default):**
+**Local Execution:**
 ```bash
 uv run implementation-scripts/lc_generator_main.py --config data/lcgen/config_local.json
 ```
@@ -55,17 +64,13 @@ uv run implementation-scripts/lc_generator_main.py --config data/lcgen/config_lo
 uv run implementation-scripts/lc_generator_main.py --config data/lcgen/config_s3.json
 ```
 
-### Configuration Options (`data/lcgen/*.json`)
-- `inputs`:
-    - `use_duckdb`: (bool) Enable DuckDB for fast CSV ingestion.
-    - `use_s3`: (bool) If true, DuckDB will read input files from S3 using `s3_config`.
-- `outputs`:
-    - `storage_type`: `"local"` or `"s3"`.
-    - `s3_bucket`: Destination bucket name.
-    - `s3_prefix`: Directory prefix within the bucket.
-- `s3_config`: Credentials and endpoint for MinIO/S3.
+### Docker Build (Lambda)
+```bash
+docker build -t stormsim-lcg-lambda -f lambda/lcgen/Dockerfile .
+```
 
 ## Development Conventions
 - **Configuration**: Store stage-specific configs in their respective data directories (e.g., `data/lcgen/config_*.json`).
 - **Data Abstraction**: Use DuckDB for reading tabular data to allow seamless switching between local files and S3.
 - **Environment**: Use `uv` for environment management and `uv run` for execution.
+- **Dependency Pinning**: Maintain Lambda-specific requirements in `lambda/lcgen/requirements.txt` to account for specific architectural or toolchain constraints (e.g., AL2 vs AL2023).

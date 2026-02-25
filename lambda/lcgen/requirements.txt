@@ -1,0 +1,9 @@
+numpy<2.0.0
+pandas
+h5py
+scipy
+tqdm
+duckdb
+boto3
+s3fs
+python-dotenv

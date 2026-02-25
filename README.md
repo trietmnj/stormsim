@@ -45,6 +45,12 @@ uv run implementation-scripts/lc_generator_main.py --config data/lcgen/config_lo
 uv run implementation-scripts/lc_generator_main.py --config data/lcgen/config_s3.json
 ```
 
+## AWS Lambda Deployment
+
+The Lifecycle Generator (`lcgen`) can be deployed as a containerized AWS Lambda function using the provided Docker configuration. This environment uses **Python 3.12 (Amazon Linux 2023)** to provide a modern toolchain for scientific dependencies.
+
+For detailed instructions, see: [lambda/lcgen/README.md](./lambda/lcgen/README.md)
+
 ---
 
 ## Project Structure
@@ -53,6 +59,8 @@ uv run implementation-scripts/lc_generator_main.py --config data/lcgen/config_s3
     - `lcgen/`: Lifecycle generation models.
     - `hydrograph_manipulator/`: Surge/Wave alignment and processing.
     - `eurotop/`: Structure response models.
+- `lambda/`: AWS Lambda deployment packages.
+    - `lcgen/`: LCG Lambda function, Dockerfile, and specific `requirements.txt`.
 - `implementation-scripts/`: Command-line drivers for each stage.
 - `data/`: Input datasets (CHS tracks, probability bins) and simulation outputs.
 - `config-files/`: Shared configuration files (JSON).
