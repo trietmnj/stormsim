@@ -2,6 +2,10 @@
 import numpy as np
 import glob
 import os
+import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
+from datetime import datetime
 
 # Define Methods
 def find_nearest_latlon(target_lat, target_lon, latitudes, longitudes, max_radius_km=None):
@@ -105,3 +109,77 @@ def chs_wave_model_header_locator(headers):
     }
 
     return matched_headers, Tp_special
+
+def infer_type(value: list[str] | np.ndarray):
+    """
+    Infer a PyArrow data type from a single example value.
+    """
+    # Try integer
+    try:
+        int(value)
+        return pa.int64()
+    except:
+        pass
+
+    # Try float
+    try:
+        float(value)
+        return pa.float64()
+    except:
+        pass
+
+    # Try datetime
+    for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%d-%m-%Y", "%m/%d/%Y",
+                "%Y-%m-%d %H:%M:%S", "%m/%d/%Y %H:%M:%S"):
+        try:
+            datetime.strptime(value, fmt)
+            return pa.timestamp("s")
+        except:
+            pass
+
+    # Default to string
+    return pa.string()
+
+
+def build_schema(headers: list[str] | np.ndarray, example_data: list[str] | np.ndarray):
+    """
+    Build a PyArrow schema using headers and example datapoints.
+    """
+    fields = []
+    for header, example in zip(headers, example_data):
+        dtype = infer_type(example)
+        fields.append(pa.field(header, dtype))
+    return pa.schema(fields)
+
+
+def csv_to_parquet(csv_file_to_read: str,
+                    csv_has_headers: bool, 
+                    headers: list[str] | np.ndarray, 
+                    example_data: list[str] | np.ndarray, 
+                    parquet_output: str):
+    """
+    Convert CSV to Parquet using inferred schema.
+    """
+
+    # Read CSV
+    if not csv_has_headers:
+        df = pd.read_csv(csv_file_to_read, header=None)
+        df.columns = headers
+        # Build schema
+        schema = build_schema(headers, example_data)
+    else:
+        df = pd.read_csv(csv_file_to_read)
+        headers = df.columns.to_list()
+        example_data = df.iloc[0].to_numpy().astype(str)
+        # Build schema
+        schema = build_schema(headers, example_data)
+
+    # Convert pandas DataFrame to Arrow Table with schema
+    table = pa.Table.from_pandas(df, schema=schema, preserve_index=False)
+
+    # Write Parquet
+    pq.write_table(table, parquet_output)
+
+    print(f"Parquet file written to: {parquet_output}")
+    print("Schema used:")
+    print(schema)
