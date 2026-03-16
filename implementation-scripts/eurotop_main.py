@@ -6,7 +6,8 @@ import sys
 import warnings
 # Import StormSim Packages
 from classes.eurotop.runup_and_ot_eurotop_2018 import runup_and_ot_eurotop_2018
-from classes.utilities.csv_utils import split_df_on_zero, write_dict_to_csv, write_dicts_to_csv
+from classes.utilities.csv_utils import split_df_on_zero, write_dict_to_csv, write_dicts_to_csv, merge_dicts
+from classes.utilities.chs_utils import write_parquet
 
 # Define Local Methods 
 def resolve_input_paths(config):
@@ -24,7 +25,7 @@ def resolve_input_paths(config):
         files = [
             os.path.join(lc_path, f)
             for f in os.listdir(lc_path)
-            if f.lower().endswith(".csv")
+            if f.lower().endswith(".parquet")
         ]
         return files, outfol
 
@@ -80,7 +81,8 @@ def compute_storm_response(stm, args, pse_config, s_v_file):
         np.isnan(Hm0).any() or
         np.isnan(Tm10).any()
     ):
-        storm_id = int(stm["storm_id"].iloc[0])
+        #storm_id = int(stm["storm_id"].iloc[0])
+        storm_id = stm["storm_id"].to_numpy()
         return {
             "storm_id": storm_id,
             "overtopping_rate": np.nan,
@@ -106,7 +108,7 @@ def compute_storm_response(stm, args, pse_config, s_v_file):
     # ---------------------------------------------------------
     # Compute Q
     # ---------------------------------------------------------
-    Q_val = np.sum(A.q) * dt * pse_config["protection_length"]
+    Q_val = np.cumsum(A.q) * dt * pse_config["protection_length"]
 
     # ---------------------------------------------------------
     # Compute Stage
@@ -120,14 +122,14 @@ def compute_storm_response(stm, args, pse_config, s_v_file):
     # ---------------------------------------------------------
     # Extract storm_id
     # ---------------------------------------------------------
-    storm_id = int(stm["storm_id"].iloc[0])
-
+    #storm_id = int(stm["storm_id"].iloc[0])
+    storm_id = stm["storm_id"].to_numpy()
     return {
         "storm_id": storm_id,
         "overtopping_rate": A.q.copy(),
         "runup": A.R2p.copy(),
-        "overtopping_volume": float(Q_val),
-        "stage": float(stage_val),
+        "overtopping_volume": Q_val,
+        "stage": stage_val,
         "lifecycle": stm["lifecycle"],
         "date": stm["date"].to_numpy()
     }
@@ -139,12 +141,13 @@ def process_lc_file(lc_file, config, pse_config, s_v_file, outfol):
     fname = os.path.basename(lc_file)
     print(f"\nREADING lc: {fname}")
 
-    lc_data = pd.read_csv(lc_file)
+    #lc_data = pd.read_csv(lc_file)
+    lc_data = pd.read_parquet(lc_file)
     args = pse_config.copy()
 
     outname = os.path.join(
         outfol,
-        fname.replace(".csv", "_responses.csv")
+        fname.replace(".parquet", "_responses.parquet")
     )
 
     print("COMPUTING responses...")
@@ -162,8 +165,9 @@ def process_lc_file(lc_file, config, pse_config, s_v_file, outfol):
 
         print(f"   {len(results)} storm segments processed")
         print("WRITING data...")
-        write_dicts_to_csv(results, outname)
-
+        #write_dicts_to_csv(results, outname)
+        aa = merge_dicts(results)
+        write_parquet(outname, aa)
     else:
         results = compute_storm_response(lc_data, args, pse_config, s_v_file)
         
@@ -171,7 +175,8 @@ def process_lc_file(lc_file, config, pse_config, s_v_file, outfol):
         results = {k: results[k] for k in OUTPUT_COL_ORDER if k in results}
 
         print("WRITING data...")
-        write_dict_to_csv(results, outname)
+        #write_dict_to_csv(results, outname)
+        write_parquet(outname, results)
 
     print("PROCESSING FINISHED")
 

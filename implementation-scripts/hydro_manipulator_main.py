@@ -4,7 +4,6 @@ import json
 import logging
 from datetime import datetime
 from typing import Tuple, Any, Optional
-
 import numpy as np
 import pandas as pd
 import h5py
@@ -12,8 +11,8 @@ import h5py
 from classes.hydrograph_manipulator.HydroManipulator import HydroManipulator
 from classes import noaa_py
 from classes.utilities.time_utils import parse_hour_float, parse_timestamps, datetime_vector
-from classes.utilities.chs_utils import list_h5_files, chs_wave_model_header_locator, find_nearest_latlon
-from classes.utilities.csv_utils import write_dict_to_csv, write_dicts_to_csv
+from classes.utilities.chs_utils import list_h5_files, chs_wave_model_header_locator, find_nearest_latlon, write_parquet
+from classes.utilities.csv_utils import write_dict_to_csv, write_dicts_to_csv, merge_dicts
 
 # --- Configuration Constants ---
 HYDRO_CONFIG_PATH = "config-files/hydroManipulator_config.json"
@@ -269,9 +268,11 @@ def main():
     write_single = str(hm.config.get("write_single_file", "False")).lower() == "true"
 
     if write_single:
-        out_file = os.path.join(hm.config["outpath"], f"{lc_name_base}.csv")
+        out_file = os.path.join(hm.config["outpath"], f"{lc_name_base}.parquet")
         logging.info(f"Writing single file: {out_file}")
-        write_dicts_to_csv(stm_records, out_file)
+        #write_dicts_to_csv(stm_records, out_file)
+        aa = merge_dicts(stm_records)
+        write_parquet(out_file, aa)
     else:
         logging.info(f"Writing individual files to: {output_dir}")
         for row in stm_records:
@@ -283,9 +284,9 @@ def main():
             except (IndexError, TypeError):
                 date_str = "UNKNOWN_DATE"
 
-            fname = f"LC_{row['lifecycle']}_stormID_{row['storm_id']}_TC_{date_str}UTC.csv"
-            write_dict_to_csv(row, os.path.join(output_dir, fname))
-
+            fname = f"LC_{row['lifecycle']}_stormID_{row['storm_id']}_TC_{date_str}UTC.parquet"
+            # write_dict_to_csv(row, os.path.join(output_dir, fname))
+            write_parquet(os.path.join(output_dir, fname), row)
     logging.info("Processing complete.")
 
 if __name__ == "__main__":

@@ -151,7 +151,6 @@ def build_schema(headers: list[str] | np.ndarray, example_data: list[str] | np.n
         fields.append(pa.field(header, dtype))
     return pa.schema(fields)
 
-
 def csv_to_parquet(csv_file_to_read: str,
                     csv_has_headers: bool, 
                     headers: list[str] | np.ndarray, 
@@ -183,3 +182,21 @@ def csv_to_parquet(csv_file_to_read: str,
     print(f"Parquet file written to: {parquet_output}")
     print("Schema used:")
     print(schema)
+
+def write_parquet(fout:str, dict_in:dict):
+    # Convert To DataFrame
+    aa = pd.DataFrame(dict_in)
+    # Pull Headers To Build Schema
+    headers = aa.columns.to_list()
+    # Grab Example Data For Each Col 
+    example_data = aa.iloc[0].to_numpy().astype(str)
+    # Build Schema 
+    schema = build_schema(headers, example_data)
+    # Create Table
+    table = pa.Table.from_pandas(
+                aa,
+                schema = schema,
+                preserve_index=False,
+            )
+    # Write Out Parquet
+    pq.write_table(table, fout)

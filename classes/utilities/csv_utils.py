@@ -104,3 +104,32 @@ def write_dicts_to_csv(dicts, filename:str):
             for i in range(length):
                 row = {k: nd[k][i] for k in fieldnames}
                 writer.writerow(row)
+
+def merge_dicts(dicts):
+    # Collect all fieldnames across dictionaries
+    all_fields = set()
+    for d in dicts:
+        all_fields.update(d.keys())
+        fieldnames = list(all_fields)
+
+    normalized = {k: [] for k in fieldnames}
+
+
+    for d in dicts:
+        # Find max vector length for this dict
+        local_max = 1
+        for val in d.values():
+            if isinstance(val, Iterable) and not isinstance(val, (str, bytes)):
+                local_max = max(local_max, len(val))
+
+        # Broadcast scalars to local_max
+        for key in fieldnames:
+            val = d.get(key, None)
+            if isinstance(val, Iterable) and not isinstance(val, (str, bytes)):
+                arr = list(val)
+            else:
+                arr = [val] * local_max
+            #normalized[key] = arr
+            normalized[key].extend(arr)
+
+    return normalized
