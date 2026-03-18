@@ -9,7 +9,7 @@ from classes.eurotop.runup_and_ot_eurotop_2018 import runup_and_ot_eurotop_2018
 from classes.utilities.csv_utils import split_df_on_zero, write_dict_to_csv, write_dicts_to_csv, merge_dicts
 from classes.utilities.chs_utils import write_parquet
 
-# Define Local Methods 
+# Define Local Methods
 def resolve_input_paths(config):
     lc_path = config["lc_data"]
 
@@ -36,6 +36,9 @@ EURO_CONFIG = "config-files/eurotop_run_config.json"
 OUTPUT_COL_ORDER = [
     "date", "storm_id", "lifecycle", "runup", "overtopping_rate",
     "overtopping_volume", "stage"
+]
+STAGE_OUTPUT_COL_ORDER = [
+    "date", "storm_id", "lifecycle", "stage"
 ]
 #-----------------------------------------------------------
 
@@ -145,10 +148,9 @@ def process_lc_file(lc_file, config, pse_config, s_v_file, outfol):
     lc_data = pd.read_parquet(lc_file)
     args = pse_config.copy()
 
-    outname = os.path.join(
-        outfol,
-        fname.replace(".parquet", "_responses.parquet")
-    )
+    base_outname = fname.replace(".parquet", "_responses.parquet")
+    outname = os.path.join(outfol, base_outname)
+    stage_outname = os.path.join(outfol, "stage_" + base_outname)
 
     print("COMPUTING responses...")
 
@@ -159,7 +161,7 @@ def process_lc_file(lc_file, config, pse_config, s_v_file, outfol):
             compute_storm_response(stm, args, pse_config, s_v_file)
             for stm in stm_list
         ]
-        
+
         # Reorder columns
         results = [{k: res[k] for k in OUTPUT_COL_ORDER if k in res} for res in results]
 
@@ -168,15 +170,23 @@ def process_lc_file(lc_file, config, pse_config, s_v_file, outfol):
         #write_dicts_to_csv(results, outname)
         aa = merge_dicts(results)
         write_parquet(outname, aa)
+
+        stage_results = {k: aa[k] for k in STAGE_OUTPUT_COL_ORDER if k in aa}
+        write_parquet(stage_outname, stage_results)
+
     else:
         results = compute_storm_response(lc_data, args, pse_config, s_v_file)
-        
+
         # Reorder columns
         results = {k: results[k] for k in OUTPUT_COL_ORDER if k in results}
 
         print("WRITING data...")
         #write_dict_to_csv(results, outname)
         write_parquet(outname, results)
+
+        # Reorder columns
+        stage_results = {k: results[k] for k in STAGE_OUTPUT_COL_ORDER if k in results}
+        write_parquet(stage_outname, stage_results)
 
     print("PROCESSING FINISHED")
 
