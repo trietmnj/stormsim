@@ -240,16 +240,16 @@ def main():
                         tide_signal,
                         tide_time
                     )
-                
+
                 # Depth Limited Waves
                 if hm.config.get("add_depth_limitation"):
                     # Compute Water Depth (h)
-                    h = processed_data["water_elevation"] + depth 
+                    h = processed_data["water_elevation"] + depth
                     # Adjust Waves That Meet Criteria
                     processed_data["wave_height"], _ = hm.add_depth_limitation(processed_data["wave_height"],
                                              processed_data["wave_peak_period"],
                                                h, GRAVITY_CONSTANT)
-                
+
                 # Update record in place
                 stm_records[i] = processed_data
 
@@ -284,7 +284,7 @@ def main():
             except (IndexError, TypeError):
                 date_str = "UNKNOWN_DATE"
 
-            fname = f"LC_{row['lifecycle']}_stormID_{row['storm_id']}_TC_{date_str}UTC.parquet"
+            fname = f"LC-{row['lifecycle']}_{date_str}UTC_stormID-{row['storm_id']}_TC_.parquet"
             # write_dict_to_csv(row, os.path.join(output_dir, fname))
             write_parquet(os.path.join(output_dir, fname), row)
     logging.info("Processing complete.")
