@@ -65,6 +65,7 @@ def simulate_lifecycle(
         month, day = utils.doy_to_month_day(year, doy)
 
         for k in range(n_kept):
+            ts = pd.Timestamp(year, 1, 1) + pd.Timedelta(days=int(doy[k]) - 1, hours=float(hour[k]))
             records.append(
                 {
                     "lifecycle": lifecycle_index,
@@ -74,6 +75,7 @@ def simulate_lifecycle(
                     "month": int(month[k]),
                     "day": int(day[k]),
                     "hour": float(hour[k]),
+                    "timestamp": ts,
                     "storm_id": int(sid[k]),
                     "rcdf": float(rcdf[k]),
                 }

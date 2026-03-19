@@ -27,7 +27,7 @@ def load_config(path: Path) -> Dict:
 # -----------------------------
 def run_lc_generator(config: Dict):
     print(f"Running LC Generator...")
-    
+
     # Simulation Params
     sim_params = config["simulation_params"]
     init_year = sim_params["initialize_year"]
@@ -41,7 +41,7 @@ def run_lc_generator(config: Dict):
     use_duckdb = inputs.get("use_duckdb", False)
     rel_prob_file = inputs["rel_prob_file"]
     storm_id_file = inputs["storm_id_prob_file"]
-    
+
     # Storage and S3 settings
     s3_config_raw = config.get("s3_config", {})
     s3_config = {
@@ -61,12 +61,14 @@ def run_lc_generator(config: Dict):
 
     # Columns for split outputs
     cols = [
+        "location_id",
         "lifecycle",
         "year_offset",
         "year",
         "month",
         "day",
         "hour",
+        "timestamp",
         "storm_id",
     ]
 
@@ -85,7 +87,8 @@ def run_lc_generator(config: Dict):
             show_progress=False,
         )
 
-        # Keep only the ID / timing columns for outputs
+        # Assign location_id and keep only the ID / timing columns for outputs
+        df["location_id"] = config.get("location_id", "unknown_location")
         df_ids = df[cols].copy()
         all_dfs.append(df_ids)
 
@@ -95,10 +98,10 @@ def run_lc_generator(config: Dict):
     outputs = config["outputs"]
     output_filename = outputs["filename"]
     storage_type = outputs.get("storage_type", "local")
-    
+
     if storage_type == "s3":
         s3_path = f"s3://{outputs['s3_bucket']}/{outputs['s3_prefix']}/{output_filename}"
-        
+
         storage_options = {}
         if s3_config_raw.get("access_key"):
             storage_options["key"] = s3_config_raw["access_key"]
@@ -106,7 +109,7 @@ def run_lc_generator(config: Dict):
             storage_options["secret"] = s3_config_raw["secret_key"]
         if s3_config_raw.get("endpoint"):
             storage_options["client_kwargs"] = {"endpoint_url": s3_config_raw["endpoint"]}
-            
+
         print(f"Writing output to {s3_path}...")
         data.to_csv(s3_path, index=False, storage_options=storage_options if storage_options else None)
         output_result = s3_path
@@ -126,7 +129,7 @@ def run_lc_generator(config: Dict):
             lcgen.validation.verify_lambda(counts, lam_target)
         else:
             print("[warn] No lifecycle data generated; skipping lambda validation.")
-            
+
     return {"status": "success", "output": output_result}
 
 # -----------------------------
@@ -135,7 +138,7 @@ def run_lc_generator(config: Dict):
 def main(config_path: Path):
     config = load_config(config_path)
     print(f"Using config: {config_path}")
-    
+
     if config["runtime"].get("profile", False):
         import cProfile
         import pstats
@@ -160,8 +163,8 @@ def main(config_path: Path):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Lifecycle Generator Main Script")
     parser.add_argument(
-        "--config", 
-        type=str, 
+        "--config",
+        type=str,
         default=str(DEFAULT_CONFIG),
         help=f"Path to the JSON config file (default: {DEFAULT_CONFIG})"
     )

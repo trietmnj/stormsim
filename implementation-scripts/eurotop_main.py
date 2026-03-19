@@ -34,11 +34,11 @@ def resolve_input_paths(config):
 #----------------- INPUTS FOR MAIN.PY ----------------------
 EURO_CONFIG = "config-files/eurotop_run_config.json"
 OUTPUT_COL_ORDER = [
-    "date", "storm_id", "lifecycle", "runup", "overtopping_rate",
+    "location_id", "date", "storm_id", "lifecycle", "runup", "overtopping_rate",
     "overtopping_volume", "stage"
 ]
 STAGE_OUTPUT_COL_ORDER = [
-    "date", "storm_id", "lifecycle", "stage"
+    "location_id", "date", "storm_id", "lifecycle", "stage"
 ]
 #-----------------------------------------------------------
 
@@ -87,6 +87,7 @@ def compute_storm_response(stm, args, pse_config, s_v_file):
         #storm_id = int(stm["storm_id"].iloc[0])
         storm_id = stm["storm_id"].to_numpy()
         return {
+            "location_id": stm["location_id"].to_numpy() if hasattr(stm, "to_numpy") else stm["location_id"],
             "storm_id": storm_id,
             "overtopping_rate": np.nan,
             "runup": np.nan,
@@ -128,6 +129,7 @@ def compute_storm_response(stm, args, pse_config, s_v_file):
     #storm_id = int(stm["storm_id"].iloc[0])
     storm_id = stm["storm_id"].to_numpy()
     return {
+        "location_id": stm["location_id"].to_numpy() if hasattr(stm, "to_numpy") else stm["location_id"],
         "storm_id": storm_id,
         "overtopping_rate": A.q.copy(),
         "runup": A.R2p.copy(),

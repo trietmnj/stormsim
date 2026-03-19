@@ -100,8 +100,17 @@ def process_single_storm(
     wave_dates, wave_dt = parse_timestamps(np.array(wave_h5[group_name]["yyyymmddHHMM"]))
 
     # 3. Handle Missing Data
-    if len(adcirc_dates) <= 1:
-        return {**data, "water_elevation": np.nan, "date": [seed_date]}
+    if len(adcirc_dates) <= 1 or len(wave_dates) <= 1:
+        logging.warning(f"Storm ID {storm_id} has insufficient data (ADCIRC: {len(adcirc_dates)}, Wave: {len(wave_dates)}). Returning NaNs.")
+        return {
+            **data,
+            "water_elevation": np.array([np.nan]),
+            "wave_height": np.array([np.nan]),
+            "wave_peak_period": np.array([np.nan]),
+            "wave_direction": np.array([np.nan]),
+            "date": [seed_date],
+            "hydro_tstp": np.array([0])
+        }
 
     # 4. Determine Master Resolution (Coarsest dt dominates)
     max_adcirc_dt = np.max(adcirc_dt)
@@ -284,7 +293,7 @@ def main():
             except (IndexError, TypeError):
                 date_str = "UNKNOWN_DATE"
 
-            fname = f"LC-{row['lifecycle']}_{date_str}UTC_stormID-{row['storm_id']}_TC_.parquet"
+            fname = f"LC-{row['lifecycle']}_{date_str}UTC_stormID-{row['storm_id']}_TC.parquet"
             # write_dict_to_csv(row, os.path.join(output_dir, fname))
             write_parquet(os.path.join(output_dir, fname), row)
     logging.info("Processing complete.")

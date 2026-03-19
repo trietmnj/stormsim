@@ -1,4 +1,5 @@
 {
+  "location_id": "DE001",
   "simulation_params": {
     "initialize_year": 2033,
     "lifecycle_duration": 10,

@@ -3,12 +3,11 @@
     "storm_types": "TC",
     "node_data_path": "data/chs-files/hdf5-examples/nodeID_64_data",
     "lc_path": "data/outputs/lcgen/EventDate_LC.csv",
-    "add_tides": true,
+    "add_tides": false,
     "tide_config": "config-files/tidal_gauge.json",
     "add_slr": true,
     "add_depth_limitation": true,
     "outpath": "data/outputs/hydro-manipulator",
-    "write_single_file": false
+    "write_single_file": true
   }
 ]
-
