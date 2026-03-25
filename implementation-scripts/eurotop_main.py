@@ -150,7 +150,7 @@ def process_lc_file(lc_file, config, pse_config, s_v_file, outfol):
     lc_data = pd.read_parquet(lc_file)
     args = pse_config.copy()
 
-    base_outname = fname.replace(".parquet", "_responses.parquet")
+    base_outname = fname.replace(".parquet", "_responses.parquet").replace("EventDate_LC_", "")
     outname = os.path.join(outfol, base_outname)
     stage_outname = os.path.join(outfol, "stage_" + base_outname)
 
@@ -169,12 +169,21 @@ def process_lc_file(lc_file, config, pse_config, s_v_file, outfol):
 
         print(f"   {len(results)} storm segments processed")
         print("WRITING data...")
-        #write_dicts_to_csv(results, outname)
-        aa = merge_dicts(results)
-        write_parquet(outname, aa)
 
-        stage_results = {k: aa[k] for k in STAGE_OUTPUT_COL_ORDER if k in aa}
-        write_parquet(stage_outname, stage_results)
+        aa = merge_dicts(results)
+        df_out = pd.DataFrame(aa)
+
+        for (loc_id, lc), group in df_out.groupby(["location_id", "lifecycle"]):
+            group_dict = group.to_dict(orient="list")
+
+            loc_base_outname = base_outname.replace(".parquet", f"_loc_{loc_id}_lc_{lc}.parquet")
+            loc_outname = os.path.join(outfol, loc_base_outname)
+            stage_loc_outname = os.path.join(outfol, "stage_" + loc_base_outname)
+
+            write_parquet(loc_outname, group_dict)
+
+            stage_results = {k: group_dict[k] for k in STAGE_OUTPUT_COL_ORDER if k in group_dict}
+            write_parquet(stage_loc_outname, stage_results)
 
     else:
         results = compute_storm_response(lc_data, args, pse_config, s_v_file)
@@ -183,12 +192,20 @@ def process_lc_file(lc_file, config, pse_config, s_v_file, outfol):
         results = {k: results[k] for k in OUTPUT_COL_ORDER if k in results}
 
         print("WRITING data...")
-        #write_dict_to_csv(results, outname)
-        write_parquet(outname, results)
+        df_out = pd.DataFrame(results)
 
-        # Reorder columns
-        stage_results = {k: results[k] for k in STAGE_OUTPUT_COL_ORDER if k in results}
-        write_parquet(stage_outname, stage_results)
+        for (loc_id, lc), group in df_out.groupby(["location_id", "lifecycle"]):
+            group_dict = group.to_dict(orient="list")
+
+            loc_base_outname = base_outname.replace(".parquet", f"_loc_{loc_id}_lc_{lc}.parquet")
+            loc_outname = os.path.join(outfol, loc_base_outname)
+            stage_loc_outname = os.path.join(outfol, "stage_" + loc_base_outname)
+
+            write_parquet(loc_outname, group_dict)
+
+            # Reorder columns
+            stage_results = {k: group_dict[k] for k in STAGE_OUTPUT_COL_ORDER if k in group_dict}
+            write_parquet(stage_loc_outname, stage_results)
 
     print("PROCESSING FINISHED")
 
