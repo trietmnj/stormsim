@@ -1,6 +1,7 @@
 import json
 import numpy as np
 from scipy.interpolate import interp1d
+from classes import sea_level_rise as slr
 
 class HydroManipulator:
     def __init__(self, config_path=None):
@@ -48,9 +49,29 @@ class HydroManipulator:
         """
         Apply sea level rise adjustment if enabled in config.
         """
-        if self.config.get("add_slr", ["False"])[0] == "True":
-            pass
-        return np.array(data_in)
+        data_out = data_in + adjustment
+        
+        return data_out
+    
+
+    def get_slr_projections(self, slr_projection, slr_scenario, alpha, start_year, end_year):
+        # Get Beta Values For Requested Projection
+        beta_table = slr.beta_scenarios.print_beta_table(slr_projection)
+        # Get Beta Value Col
+        beta = beta_table.iloc[:, 1].to_numpy()
+
+        # Generate the DataFrame with all porjection curves
+        slr_scenarios_df = slr.sea_level_rise.generate_slr_curves(alpha, beta, start_year, end_year)
+        scenario_list = beta_table.iloc[:, -1].to_list()
+
+        # Keep Requested Scenario
+        for ii, name in enumerate(scenario_list):
+            print(ii)
+            if name.lower() == slr_scenario:
+                slr_scenarios_df = slr_scenarios_df[['year',f"scenario{ii+1}"]]
+                slr_scenarios_df.columns = ['year', slr_scenario] 
+
+        return beta_table, slr_scenarios_df
 
     def add_tides(self, data_in, time_in, tide_signal, tide_time):
         # Interp Tidal Signal To Input Signal
