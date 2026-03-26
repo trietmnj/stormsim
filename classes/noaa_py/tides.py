@@ -2,6 +2,8 @@
 import requests
 from datetime import datetime, timedelta
 import time
+from collections import defaultdict
+import pandas as pd
 
 # Define Methods
 def _fetch_url(url, is_json=False, retries=8, pause_time=5):
@@ -53,8 +55,8 @@ def get_tidal_prediction(station=None, start_date=None, end_date=None, interval=
         print("Error: Missing required parameters (station, start_date, end_date).")
         return None
 
-    # Create Date Segments
-    s_list, e_list = generate_date_chunks(start_date, end_date, date_fmt="%Y%m%d")
+    # Create Date Segments (Predictions -> 30 days Limit)
+    s_list, e_list = generate_date_chunks(30, start_date, end_date, date_fmt="%Y%m%d")
     
     # --- API LOGIC (Same as before) ---
     base_url = "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter"
@@ -105,7 +107,86 @@ def get_tidal_prediction(station=None, start_date=None, end_date=None, interval=
         print(f"Error: No prediction data found for {station}")
         return None
 
-def generate_date_chunks(start_input: str | datetime, end_input: str | datetime, date_fmt=None):
+def get_monthly_mean(station=None, start_date=None, end_date=None, datum='MSL'):
+    """
+    Fetches tidal prediction data.
+
+    Accepts inputs in two ways:
+    1. Explicit Arguments: get_monthly_mean("8557380", "20260118", ...)
+    2. JSON/Dictionary:    get_monthly_mean({"station": "8557380", "start_date": "20260118", ...})
+    """
+
+    # --- INPUT HANDLING LOGIC ---
+    # If the first argument is a dictionary, we treat it as the 'json' input
+    if isinstance(station, dict):
+        config = station
+        # extract values from the dict, falling back to the defaults defined in signature if missing
+        station = config.get('station')
+        start_date = config.get('start_date')
+        end_date = config.get('end_date')
+        datum = config.get('datum', datum)
+
+    # Basic Validation to ensure we have the minimums
+    if not station or not start_date or not end_date:
+        print("Error: Missing required parameters (station, start_date, end_date).")
+        return None
+
+    # Create Date Segments (Monthly Product -> 200 years limit)
+    s_list, e_list = generate_date_chunks(199*365, start_date, end_date, date_fmt="%Y%m%d")
+    
+    # --- API LOGIC (Same as before) ---
+    base_url = "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter"
+
+    params = {
+        "product": "monthly_mean",
+        "application": "NOS.COOPS.TAC.WL",
+        "begin_date": start_date,
+        "end_date": end_date,
+        "station": station,
+        "datum": datum,
+        "time_zone": "gmt",
+        "units": "metric",
+        "format": "json"
+    }
+
+    for ii, (st_date, ed_date) in enumerate(zip(s_list, e_list)):  
+        # Grab Date Range
+        params["begin_date"] = st_date
+        params["end_date"] = ed_date
+        # Build URL
+        query_string = "&".join([f"{k}={v}" for k, v in params.items()])
+        full_url = f"{base_url}?{query_string}"
+
+        print(f"Fetching monthly mean water level for {station} ({ii+1}/{len(s_list)}): {st_date} - {ed_date}...")
+        if ii == 0:
+            data = _fetch_url(full_url, is_json=True)
+        else:
+            # Fetch Data
+            dummy = _fetch_url(full_url, is_json=True)
+            # Append To Existing List
+            data['data'].extend(dummy['data'])
+            
+    if data and 'data' in data:         
+        # Create a dictionary where every default value is an empty list
+        formatted_data = defaultdict(list)
+
+        # Populate the dictionary
+        for row in data['data']:
+            for key, value in row.items():
+                formatted_data[key].append(pd.to_numeric(value))
+
+        # Convert back to a standard dictionary (optional, but cleaner)
+        formatted_data = dict(formatted_data)
+
+        return formatted_data
+    elif data and 'error' in data:
+        print(f"API Error: {data['error'].get('message')}")
+        return None
+    else:
+        print(f"Error: No prediction data found for {station}")
+        return None
+
+def generate_date_chunks(dt: int, start_input: str | datetime, end_input: str | datetime, date_fmt=None):
     """
     Generates start/end date pairs in 30-day chunks (or less).
     
@@ -143,7 +224,7 @@ def generate_date_chunks(start_input: str | datetime, end_input: str | datetime,
         # Calculate the tentative end of the window (30 days)
         # We subtract 1 second or adjust logic if you need exact 30-day spans, 
         # but here we follow your logic: Start + 30 days.
-        window_end = current_date + timedelta(days=30)
+        window_end = current_date + timedelta(days=dt)
         
         # Clip the window if it exceeds the user's requested end date
         if window_end > final_date:
