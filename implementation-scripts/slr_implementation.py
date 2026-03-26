@@ -48,7 +48,7 @@ def main():
     slr.plot_slr.plot_slr_curves(slr_scenarios_df, beta, wl_ds,
                                 title=f"Sea Level Rise {projections.upper()} Projections ({start_year}-{end_year}) ({wl_datum})",
                                 line_names=beta_table.iloc[:, 2].to_list(),
-                                output_folder='this_is_a_test')
+                                output_folder=out_path)
 
 # ---------------------------------------------------------
 # MAIN
