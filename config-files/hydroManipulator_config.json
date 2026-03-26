@@ -6,6 +6,8 @@
     "add_tides": false,
     "tide_config": "config-files/tidal_gauge.json",
     "add_slr": true,
+    "slr_projection": "usace_2019",
+    "slr_projection_scenario": "low",
     "add_depth_limitation": true,
     "outpath": "data/outputs/hydro-manipulator",
     "write_single_file": false

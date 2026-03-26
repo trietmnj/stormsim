@@ -13,6 +13,7 @@ from classes import noaa_py
 from classes.utilities.time_utils import parse_hour_float, parse_timestamps, datetime_vector
 from classes.utilities.chs_utils import list_h5_files, chs_wave_model_header_locator, find_nearest_latlon, write_parquet
 from classes.utilities.csv_utils import write_dict_to_csv, write_dicts_to_csv, merge_dicts
+from classes import sea_level_rise as slr
 
 # --- Configuration Constants ---
 HYDRO_CONFIG_PATH = "config-files/hydroManipulator_config.json"
@@ -212,14 +213,29 @@ def main():
         wave_headers, _ = chs_wave_model_header_locator(wave_datasets)
 
         # C. Prep Tides & Trends
-        season_trend = noaa_py.seasonal_cycle.get_station_seasonal_trend(tides_config["station"])
-        season_mask_indices = np.searchsorted(np.array(season_trend['month']), lc_data['month'].to_numpy())
+        if tides_config["station"] is not None:
+            season_trend = noaa_py.seasonal_cycle.get_station_seasonal_trend(tides_config["station"])
+            season_mask_indices = np.searchsorted(np.array(season_trend['month']), lc_data['month'].to_numpy())
+
 
         tidal_ds = None
         if hm.config.get("add_tides"):
             tides_config["start_date"] = f"{lc_data['year'].min()}0101"
             tides_config["end_date"] = f"{lc_data['year'].max()}1231"
             tidal_ds = noaa_py.tides.get_tidal_prediction(tides_config)
+
+        # --- Sea Level Rise -----
+        if hm.config.get("add_slr"):
+            if tides_config["station"] is not None:
+                # SLR Linear Trend (NOAA) -> alpha value is on mm/yr    
+                _, alpha = slr.linear_trend_api.get_noaa_linear_trend(int(tides_config["station"])) # This can be a user input instead of NOAA 
+                # Create SLR Projection Curves (units -< mm)
+                beta_table, slr_scenarios_df = hm.get_slr_projections(hm.config.get("slr_projection"), hm.config.get("slr_projection_scenario"), alpha, lc_data['year'].min(), lc_data['year'].max())
+            else:
+                print('No valid NOAA station id provided. SLR adjustment will be ignored.')
+                hm.config["add_slr"] = False
+
+
 
         # D. Process Storms
         stm_records = lc_data.to_dict(orient="records")
@@ -236,8 +252,9 @@ def main():
                 processed_data["water_elevation"] = hm.correct_bias(processed_data["water_elevation"], Ba, Br)
 
                 # -- Steric Adjustment --
-                trend_val = season_trend['level'][season_mask_indices[i]]
-                processed_data["water_elevation"] += trend_val
+                if tides_config["station"] is not None:
+                    trend_val = season_trend['level'][season_mask_indices[i]]
+                    processed_data["water_elevation"] += trend_val
 
                 # -- Tides --
                 if hm.config.get("add_tides"):
@@ -250,7 +267,15 @@ def main():
                         tide_time
                     )
 
-                # Depth Limited Waves
+                        # --- Sea Level Rise -----
+                if hm.config.get("add_slr"):
+                    # Pull SLR Vallue From Curve
+                    slr_adj = slr_scenarios_df[slr_scenarios_df['year'] == storm_data['year']].iloc[:, 1].to_numpy()
+                    # Add To Storm Hydrographs
+                    processed_data["water_elevation"] = hm.add_slr(processed_data["water_elevation"], slr_adj/1000) # Converting SLR From mm to m
+
+                # Note: Depth limitation should be called after all water column (h) adjustments. h = SWL + topo/bathy
+                # ---- Depth Limited Waves
                 if hm.config.get("add_depth_limitation"):
                     # Compute Water Depth (h)
                     h = processed_data["water_elevation"] + depth
