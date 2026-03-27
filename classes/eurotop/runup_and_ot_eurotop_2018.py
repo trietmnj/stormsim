@@ -283,6 +283,7 @@ class runup_and_ot_eurotop_2018:
         q = np.where(w_depth_ratio > 4, q_no_foreshore, q_foreshore)
         # Append To Outputs
         self.q = q + self.ifactors_q_overflow
+        self.R2p = np.zeros_like(self.q)
 
     # ---------- EXECUTION FUNCTION ---------
     def structure_response(self):

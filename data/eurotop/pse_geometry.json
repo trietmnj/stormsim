@@ -1,11 +1,37 @@
-{
-  "type": 1,
-  "app_type": 2,
-  "material": "concrete",
-  "crest_elevation": 3.2,
-  "toe_elevation": -1.3,
-  "seaward_slope": 0.25,
-  "crest_width": 3,
-  "protection_length": 1000
-}
+[
+  {
+    "name":"levee-a",
+    "type": 1,
+    "app_type": 2,
+    "material": "concrete",
+    "crest_elevation": 3.2,
+    "toe_elevation": -1.3,
+    "seaward_slope": 0.25,
+    "crest_width": 3,
+    "protection_length": 1000
+  },
+  {
+    "name": "no-pse",
+    "type": 0,
+    "app_type": 2,
+    "material": "None",
+    "crest_elevation": "None",
+    "toe_elevation": -1,
+    "seaward_slope": "None",
+    "crest_width": "None",
+    "Ks": 1,
+    "protection_length": 1000
+  },
+  {
+    "name": "wall-a",
+    "type": 3,
+    "app_type": 2,
+    "material": "concrete",
+    "crest_elevation": 3.2,
+    "toe_elevation": -1.3,
+    "seaward_slope": 0.25,
+    "crest_width": 3,
+    "protection_length": 1000
+  }
+]
 
