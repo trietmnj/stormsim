@@ -15,7 +15,7 @@ end_year = 2150
 # Define SLR Projections To Use
 projections = 'usace_2019' # noaa_2012 or carswg_2016
 # Define figure output path (None == Make Figure Visible)
-out_path = 'data\outputs\slr_demo'
+out_path = r'data\outputs\slr_demo'
 
 # ----------- Main 
 def main():
