@@ -1,7 +1,6 @@
 from datetime import date
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt 
 
 def generate_slr_curves(alpha, beta_values, y1, y2):
     """
