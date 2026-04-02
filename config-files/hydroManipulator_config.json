@@ -10,6 +10,6 @@
     "slr_projection_scenario": "low",
     "add_depth_limitation": true,
     "outpath": "data/outputs/hydro-manipulator",
-    "write_single_file": false
+    "write_single_file": true
   }
 ]
