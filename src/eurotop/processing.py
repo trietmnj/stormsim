@@ -13,30 +13,6 @@ STAGE_OUTPUT_COL_ORDER = [
 ]
 
 # ---------------------------------------------------------
-# Save computation results to parquet files
-# ---------------------------------------------------------
-def save_results(results, base_outname, outfol):
-    """Saves computation results to parquet files, grouped by location and lifecycle."""
-    if isinstance(results, list):
-        results = merge_dicts(results)
-
-    df_out = pd.DataFrame(results)
-
-    for (loc_id, lc), group in df_out.groupby(["location_id", "lifecycle"]):
-        group_dict = group.to_dict(orient="list")
-
-        # Build location-specific base filename
-        loc_base = base_outname.replace(".parquet", f"_loc_{loc_id}_lc_{lc}.parquet")
-
-        # Save full responses
-        full_results = {k: group_dict[k] for k in OUTPUT_COL_ORDER if k in group_dict}
-        write_parquet(os.path.join(outfol, loc_base), full_results)
-
-        # Save stage-only responses
-        stage_results = {k: group_dict[k] for k in STAGE_OUTPUT_COL_ORDER if k in group_dict}
-        write_parquet(os.path.join(outfol, "stage_" + loc_base), stage_results)
-
-# ---------------------------------------------------------
 # Process a single LC file (single storm or multi-storm)
 # ---------------------------------------------------------
 def process_lc_file(lc_file, config, pse_config, s_v_file, outfol):
@@ -61,5 +37,30 @@ def process_lc_file(lc_file, config, pse_config, s_v_file, outfol):
         results = [compute_storm_response(lc_data, args, pse_config, s_v_file)]
 
     print("WRITING data...")
-    save_results(results, base_outname, outfol)
+    _save_results(results, base_outname, outfol)
     print("PROCESSING FINISHED")
+
+# ---------------------------------------------------------
+# Save computation results to parquet files
+# ---------------------------------------------------------
+def _save_results(results, base_outname, outfol):
+    """Saves computation results to parquet files, grouped by location and lifecycle."""
+    if isinstance(results, list):
+        results = merge_dicts(results)
+
+    df_out = pd.DataFrame(results)
+
+    for (loc_id, lc), group in df_out.groupby(["location_id", "lifecycle"]):
+        group_dict = group.to_dict(orient="list")
+
+        # Build location-specific base filename
+        loc_base = base_outname.replace(".parquet", f"_loc_{loc_id}_lc_{lc}.parquet")
+
+        # Save full responses
+        full_results = {k: group_dict[k] for k in OUTPUT_COL_ORDER if k in group_dict}
+        write_parquet(os.path.join(outfol, loc_base), full_results)
+
+        # Save stage-only responses
+        stage_results = {k: group_dict[k] for k in STAGE_OUTPUT_COL_ORDER if k in group_dict}
+        write_parquet(os.path.join(outfol, "stage_" + loc_base), stage_results)
+

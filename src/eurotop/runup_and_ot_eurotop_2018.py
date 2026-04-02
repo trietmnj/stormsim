@@ -305,9 +305,3 @@ class runup_and_ot_eurotop_2018:
 
         elif self.structure_type == 3: # 3 - vertical, battered or steep walls
             self._overtopping_floodwall()
-
-
-
-
-
-

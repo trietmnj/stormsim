@@ -5,7 +5,7 @@ from src.eurotop.runup_and_ot_eurotop_2018 import runup_and_ot_eurotop_2018
 # ---------------------------------------------------------
 # Compute responses using G2 approach
 # ---------------------------------------------------------
-def compute_g2_response(stm, args, pse_config):
+def _compute_g2_response(stm, args, pse_config):
     """Computes response using the G2 approach (G2 approach stage calculation)."""
     # G2 Approach
     # stage_val = swl + 0.7*Ks*np.min([1.12*Hm0, 0.55*ds])
@@ -32,7 +32,7 @@ def compute_g2_response(stm, args, pse_config):
 # ---------------------------------------------------------
 # Compute responses using Eurotop 2018 approach
 # ---------------------------------------------------------
-def compute_eurotop_response(stm, args, pse_config, s_v_file):
+def _compute_eurotop_response(stm, args, pse_config, s_v_file):
     """Computes response using the Eurotop 2018 empirical formulas."""
     A = runup_and_ot_eurotop_2018(args)
     A.structure_response()
@@ -97,6 +97,6 @@ def compute_storm_response(stm, args, pse_config, s_v_file):
 
     # Delegate computation based on structure type
     if pse_config["type"] == 0:
-        return compute_g2_response(stm, args, pse_config)
+        return _compute_g2_response(stm, args, pse_config)
     else:
-        return compute_eurotop_response(stm, args, pse_config, s_v_file)
+        return _compute_eurotop_response(stm, args, pse_config, s_v_file)
