@@ -8,7 +8,7 @@ import sys
 from typing import Dict
 
 # Import StormSim Packages
-from classes import lcgen
+from src import lcgen
 
 # -----------------------------
 # CONFIG LOADING
