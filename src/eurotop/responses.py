@@ -72,10 +72,6 @@ def compute_storm_response(stm, args, pse_config, s_v_file):
     Hm0  = stm["wave_height"].to_numpy()
     Tm10 = stm["wave_peak_period"].to_numpy()
 
-    # ------------ This is temporary
-    stm["location_id"] = 1
-    #----------------
-
     args["SWL"]  = SWL
     args["Hm0"]  = Hm0
     args["Tm10"] = Tm10
