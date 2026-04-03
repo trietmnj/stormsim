@@ -20,6 +20,7 @@ def _compute_g2_response(stm, args, pse_config):
 
     return {
         "location_id": stm["location_id"].to_numpy() if hasattr(stm["location_id"], "to_numpy") else stm["location_id"],
+        "stormevent_id": stm["stormevent_id"].to_numpy() if "stormevent_id" in stm and hasattr(stm["stormevent_id"], "to_numpy") else stm.get("stormevent_id"),
         "storm_id": stm["storm_id"].to_numpy(),
         "overtopping_rate": np.zeros_like(stage_val),
         "runup": np.zeros_like(stage_val),
@@ -54,6 +55,7 @@ def _compute_eurotop_response(stm, args, pse_config, s_v_file):
 
     return {
         "location_id": stm["location_id"].to_numpy() if hasattr(stm["location_id"], "to_numpy") else stm["location_id"],
+        "stormevent_id": stm["stormevent_id"].to_numpy() if "stormevent_id" in stm and hasattr(stm["stormevent_id"], "to_numpy") else stm.get("stormevent_id"),
         "storm_id": stm["storm_id"].to_numpy(),
         "overtopping_rate": A.q.copy(),
         "runup": A.R2p.copy(),
@@ -82,6 +84,7 @@ def compute_storm_response(stm, args, pse_config, s_v_file):
     if np.isnan(SWL).any() or np.isnan(Hm0).any() or np.isnan(Tm10).any():
         return {
             "location_id": stm["location_id"].to_numpy() if hasattr(stm["location_id"], "to_numpy") else stm["location_id"],
+            "stormevent_id": stm["stormevent_id"].to_numpy() if "stormevent_id" in stm and hasattr(stm["stormevent_id"], "to_numpy") else stm.get("stormevent_id"),
             "storm_id": stm["storm_id"].to_numpy(),
             "overtopping_rate": np.nan,
             "runup": np.nan,

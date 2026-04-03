@@ -93,6 +93,8 @@ def run_lc_generator(config: Dict):
         all_dfs.append(df_ids)
 
     data = pd.concat(all_dfs, ignore_index=True)
+    # Add a globally unique stormevent_id for each sampled event across all lifecycles
+    data.insert(1, "stormevent_id", range(1, len(data) + 1))
 
     # Handle Output
     outputs = config["outputs"]

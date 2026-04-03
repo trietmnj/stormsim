@@ -5,11 +5,11 @@ from src.utilities.chs_utils import write_parquet
 from src.eurotop.responses import compute_storm_response
 
 OUTPUT_COL_ORDER = [
-    "location_id", "date", "storm_id", "lifecycle", "runup", "overtopping_rate",
+    "location_id", "date", "stormevent_id", "storm_id", "lifecycle", "runup", "overtopping_rate",
     "overtopping_volume", "stage"
 ]
 STAGE_OUTPUT_COL_ORDER = [
-    "location_id", "date", "storm_id", "lifecycle", "stage"
+    "location_id", "date", "stormevent_id", "storm_id", "lifecycle", "stage"
 ]
 
 # ---------------------------------------------------------
