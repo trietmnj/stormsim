@@ -21,6 +21,10 @@ The system operates as a linear pipeline:
 - **Purpose**: Calculates wave runup, overtopping rates, and flood volumes for specific coastal geometries.
 - **Logic**: Implements Eurotop 2018 empirical formulas to derive physical responses (R2%, q, Q) and resulting flood stages.
 
+### 4. Hazard Curves (JPM & PST)
+- **Purpose**: Calculates extreme value statistics and hazard curves using Joint Probability Method (JPM) and Peaks-over-Threshold (PST/POT) analysis.
+- **Logic**: Python implementation of legacy MATLAB models for storm surge and wave hazard assessment.
+
 ---
 
 ## Getting Started
@@ -55,15 +59,20 @@ For detailed instructions, see: [lambda/lcgen/README.md](./lambda/lcgen/README.m
 
 ## Project Structure
 
-- `classes/`: Core logic and package implementation.
+- `src/`: Core logic and package implementation.
     - `lcgen/`: Lifecycle generation models.
     - `hydrograph_manipulator/`: Surge/Wave alignment and processing.
     - `eurotop/`: Structure response models.
+    - `hazard_curves/`: JPM and PST/POT hazard analysis logic.
+    - `sea_level_rise/`: Sea level rise scenario generation and trend analysis.
+    - `noaa_py/`: NOAA data query and tidal analysis utilities.
+    - `utilities/`: General-purpose utilities (CSV, time, CHS).
 - `lambda/`: AWS Lambda deployment packages.
     - `lcgen/`: LCG Lambda function, Dockerfile, and specific `requirements.txt`.
 - `implementation-scripts/`: Command-line drivers for each stage.
 - `data/`: Input datasets (CHS tracks, probability bins) and simulation outputs.
 - `config-files/`: Shared configuration files (JSON).
+- `tests/`: Unit and integration tests, including MATLAB validation data for hazard curves.
 
 ## Configuration
 
