@@ -1,6 +1,13 @@
 [project]
-name = "conversion"
+name = "stormsim"
 version = "0.1.0"
+description = "A modular coastal storm simulation system for synthetic storm lifecycles and physical impact modeling."
+readme = "README.md"
+authors = [
+    { name = "StormSim Developers" }
+]
+license = { text = "MIT" }
+requires-python = ">=3.8"
 dependencies = [
     "requests",
     "numpy",
@@ -14,13 +21,15 @@ dependencies = [
     "python-dotenv",
     "pyarrow",
 ]
-requires-python = ">=3.8"
 
+[project.urls]
+Homepage = "https://github.com/trietmnj/stormsim"
+Repository = "https://github.com/trietmnj/stormsim"
 
 [build-system]
 requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-where = ["."]
-include = ["src"]
+where = ["src"]
+include = ["stormsim*"]

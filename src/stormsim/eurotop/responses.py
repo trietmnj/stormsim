@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from src.eurotop.runup_and_ot_eurotop_2018 import runup_and_ot_eurotop_2018
+from stormsim.eurotop.runup_and_ot_eurotop_2018 import runup_and_ot_eurotop_2018
 
 # ---------------------------------------------------------
 # Compute responses using G2 approach

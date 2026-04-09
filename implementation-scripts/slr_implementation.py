@@ -1,6 +1,6 @@
 # Import Packages
-from src import noaa_py
-from src import sea_level_rise as slr
+from stormsim import noaa_py
+from stormsim import sea_level_rise as slr
 import pandas as pd
 
 # --------------- Define Inputs

@@ -8,12 +8,12 @@ import numpy as np
 import pandas as pd
 import h5py
 # --- Custom Imports ---
-from src.hydrograph_manipulator.HydroManipulator import HydroManipulator
-from src import noaa_py
-from src.utilities.time_utils import parse_hour_float, parse_timestamps, datetime_vector
-from src.utilities.chs_utils import list_h5_files, chs_wave_model_header_locator, find_nearest_latlon, write_parquet
-from src.utilities.csv_utils import write_dict_to_csv, write_dicts_to_csv, merge_dicts
-from src import sea_level_rise as slr
+from stormsim.hydrograph_manipulator.HydroManipulator import HydroManipulator
+from stormsim import noaa_py
+from stormsim.utilities.time_utils import parse_hour_float, parse_timestamps, datetime_vector
+from stormsim.utilities.chs_utils import list_h5_files, chs_wave_model_header_locator, find_nearest_latlon, write_parquet
+from stormsim.utilities.csv_utils import write_dict_to_csv, write_dicts_to_csv, merge_dicts
+from stormsim import sea_level_rise as slr
 
 # --- Configuration Constants ---
 HYDRO_CONFIG_PATH = "config-files/hydroManipulator_config.json"

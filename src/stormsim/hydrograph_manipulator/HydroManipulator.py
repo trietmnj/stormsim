@@ -1,7 +1,7 @@
 import json
 import numpy as np
 from scipy.interpolate import interp1d
-from src import sea_level_rise as slr
+from stormsim import sea_level_rise as slr
 
 class HydroManipulator:
     def __init__(self, config_path=None):

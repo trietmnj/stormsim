@@ -1,7 +1,7 @@
 import os 
 import pandas as pd
-from src.hazard_curves import jpm, pst
-from src.utilities.chg_utils import plot_hc
+from stormsim.hazard_curves import jpm, pst
+from stormsim.utilities.chg_utils import plot_hc
 import numpy as np
 # ------------------
 # Define Inputs

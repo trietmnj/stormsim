@@ -1,8 +1,8 @@
 import os
 import pandas as pd
-from src.utilities.csv_utils import split_df_on_zero, merge_dicts
-from src.utilities.chs_utils import write_parquet
-from src.eurotop.responses import compute_storm_response
+from stormsim.utilities.csv_utils import split_df_on_zero, merge_dicts
+from stormsim.utilities.chs_utils import write_parquet
+from stormsim.eurotop.responses import compute_storm_response
 
 OUTPUT_COL_ORDER = [
     "location_id", "date", "stormevent_id", "storm_id", "lifecycle", "runup", "overtopping_rate",

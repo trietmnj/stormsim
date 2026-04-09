@@ -2,9 +2,9 @@ import numpy as np
 import os
 import pandas as pd
 import pyarrow as pa
-from src.hazard_curves import jpm
-from src.hydrograph_manipulator.HydroManipulator import HydroManipulator
-from src.utilities.chg_utils import get_aef, prep_frequency
+from stormsim.hazard_curves import jpm
+from stormsim.hydrograph_manipulator.HydroManipulator import HydroManipulator
+from stormsim.utilities.chg_utils import get_aef, prep_frequency
 
 # --------------------------
 # DEFINE INPUTS

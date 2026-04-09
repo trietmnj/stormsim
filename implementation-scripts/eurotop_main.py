@@ -5,7 +5,7 @@ import sys
 import warnings
 
 # Import StormSim Packages
-from src.eurotop.processing import process_lc_file
+from stormsim.eurotop.processing import process_lc_file
 
 #----------------- INPUTS FOR MAIN.PY ----------------------
 EURO_CONFIG = "config-files/eurotop_run_config.json"
