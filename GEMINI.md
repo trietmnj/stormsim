@@ -6,16 +6,21 @@ StormSim is a coastal storm simulation workflow designed to model storm events a
 1.  **Lifecycle Generation (`lcgen`):** Simulates synthetic timelines of storm events based on historical data and statistical models (Poisson recurrence).
 2.  **Hydrograph Manipulation (`HydroManipulator`):** Constructs detailed time-series hydrographs (surge, water elevation, wave characteristics) for each simulated storm event.
 3.  **Structure Response (`eurotop`):** Calculates wave runup and overtopping rates for coastal structures using Eurotop 2018 empirical formulas.
+4.  **Hazard Curves (`hazard_curves`):** Calculates extreme value statistics and hazard curves using Joint Probability Method (JPM) and Peaks-over-Threshold (PST/POT) analysis.
 
 ## Architecture & Data Flow
 The workflow follows a linear pipeline:
 `Lifecycle Generator` -> `Hydrograph Manipulator` -> `Eurotop`
 
+Hazard curve analysis can be performed as a standalone component or used to provide probability-based inputs to the main pipeline.
+
 ### Key Components
-- **`classes/`**: Core logic and package implementation.
+- **`src/`**: Core logic and package implementation.
     - `lcgen/`: Lifecycle generation logic (sampling, loading, validation).
     - `hydrograph_manipulator/`: Hydrograph processing logic.
     - `eurotop/`: Eurotop 2018 response models.
+    - `hazard_curves/`: JPM and PST/POT analysis logic.
+    - `sea_level_rise/`: Sea level rise scenario generation and trend analysis.
     - `noaa_py/`: Utilities for NOAA data queries and tidal analysis.
     - `utilities/`: General-purpose utilities (CSV, time, CHS).
 - **`implementation-scripts/`**: Entry points for running different stages of the workflow.
@@ -29,7 +34,8 @@ The workflow follows a linear pipeline:
     - Integrated DuckDB for abstracted, high-performance data ingestion.
     - Implemented AWS Lambda support using a containerized environment.
 - **Hazard Curves**:
-    - Porting MATLAB JPM/PST logic to Python (see `hazard-curves/` directory).
+    - Porting MATLAB JPM/PST logic to Python (see `src/hazard_curves/` directory).
+    - Includes unit tests with MATLAB-derived validation datasets.
 
 ## AWS Lambda Deployment (`lcgen`)
 The Lifecycle Generator can be deployed as a containerized AWS Lambda function.
