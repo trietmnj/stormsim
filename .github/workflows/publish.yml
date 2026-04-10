@@ -1,4 +1,4 @@
-name: Publish
+name: Release
 
 on:
   push:
@@ -6,12 +6,11 @@ on:
       - 'v*'
 
 jobs:
-  build-n-publish:
-    name: Build and publish to PyPI
+  build-n-release:
+    name: Build and Release
     runs-on: ubuntu-latest
     permissions:
-      id-token: write  # Mandatory for trusted publishing
-      contents: write  # For creating GitHub Release
+      contents: write  # Mandatory for creating GitHub Release
 
     steps:
       - uses: actions/checkout@v4
@@ -27,9 +26,6 @@ jobs:
 
       - name: Build distribution
         run: uv build
-
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
