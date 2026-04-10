@@ -15,7 +15,7 @@ The workflow follows a linear pipeline:
 Hazard curve analysis can be performed as a standalone component or used to provide probability-based inputs to the main pipeline.
 
 ### Key Components
-- **`src/`**: Core logic and package implementation.
+- **`src/stormsim/`**: Core logic and package implementation.
     - `lcgen/`: Lifecycle generation logic (sampling, loading, validation).
     - `hydrograph_manipulator/`: Hydrograph processing logic.
     - `eurotop/`: Eurotop 2018 response models.
@@ -34,7 +34,7 @@ Hazard curve analysis can be performed as a standalone component or used to prov
     - Integrated DuckDB for abstracted, high-performance data ingestion.
     - Implemented AWS Lambda support using a containerized environment.
 - **Hazard Curves**:
-    - Porting MATLAB JPM/PST logic to Python (see `src/hazard_curves/` directory).
+    - Porting MATLAB JPM/PST logic to Python (see `src/stormsim/hazard_curves/` directory).
     - Includes unit tests with MATLAB-derived validation datasets.
 
 ## AWS Lambda Deployment (`lcgen`)
@@ -57,26 +57,13 @@ uv sync
 - `boto3`, `s3fs` (S3/MinIO Storage)
 - `python-dotenv` (Environment Management)
 
-### Running Lifecycle Generation
-The lifecycle generator supports JSON-based configuration and can target either local storage or an S3/MinIO bucket.
-
-**Local Execution:**
-```bash
-uv run implementation-scripts/lc_generator_main.py --config data/lcgen/config_local.json
-```
-
-**S3/MinIO Execution:**
-```bash
-uv run implementation-scripts/lc_generator_main.py --config data/lcgen/config_s3.json
-```
-
-### Docker Build (Lambda)
-```bash
-docker build -t stormsim-lcg-lambda -f lambda/lcgen/Dockerfile .
-```
+## Automated Releases
+This project is configured to automatically build and release to GitHub when a version tag is pushed.
+- **Workflow**: `.github/workflows/publish.yml`
+- **Trigger**: Push a tag starting with `v` (e.g., `v0.1.0`).
 
 ## Development Conventions
 - **Configuration**: Store stage-specific configs in their respective data directories (e.g., `data/lcgen/config_*.json`).
 - **Data Abstraction**: Use DuckDB for reading tabular data to allow seamless switching between local files and S3.
 - **Environment**: Use `uv` for environment management and `uv run` for execution.
-- **Dependency Pinning**: Maintain Lambda-specific requirements in `lambda/lcgen/requirements.txt` to account for specific architectural or toolchain constraints (e.g., AL2 vs AL2023).
+- **Package Imports**: Always use absolute imports from the `stormsim` namespace (e.g., `from stormsim.lcgen import sampling`).
