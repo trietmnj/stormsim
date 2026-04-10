@@ -22,6 +22,11 @@ dependencies = [
     "pyarrow",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest",
+]
+
 [project.urls]
 Homepage = "https://github.com/trietmnj/stormsim"
 Repository = "https://github.com/trietmnj/stormsim"
