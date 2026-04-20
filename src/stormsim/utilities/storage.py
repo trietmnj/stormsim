@@ -19,10 +19,10 @@ class StorageContext:
         self.outputs = config.get("outputs", {})
         self.is_lambda = is_lambda
         
-        # 1. Determine locality FIRST (used by s3_config)
+        # 1. Determine locality FIRST
         self.use_local = self._determine_locality()
 
-        # 2. S3 configuration with environment fallbacks
+        # 2. S3 configuration
         self.s3_config = self._init_s3_config(s3_config_override)
 
     def _determine_locality(self) -> bool:
@@ -33,32 +33,23 @@ class StorageContext:
                 return True
             return bool(self.inputs.get("use_local_inputs", False))
         
-        # Default to S3 if use_s3 is True in inputs
-        return not self.inputs.get("use_s3", False)
+        return not (self.inputs.get("use_s3", False) or self.config.get("s3_config", {}).get("use_s3", False))
 
     def _init_s3_config(self, override: Optional[Dict]) -> Dict:
         raw = override or self.config.get("s3_config", {})
         
-        # Logic: If we are in Lambda, we use S3 unless explicitly forced local.
-        # Otherwise, follow the config.
-        use_s3 = not self.use_local if self.is_lambda else raw.get("use_s3", self.inputs.get("use_s3", False))
+        # Use S3 if we are in Lambda (and not local) or if explicitly enabled
+        use_s3 = not self.use_local if self.is_lambda else (raw.get("use_s3") or self.inputs.get("use_s3", False))
         
-        endpoint = raw.get("endpoint")
-        access_key = raw.get("access_key")
-        secret_key = raw.get("secret_key")
-
-        if use_s3 and self.is_lambda:
-            if not endpoint:
-                region = os.environ.get("AWS_REGION", "us-gov-west-1")
-                endpoint = f"https://s3.{region}.amazonaws.com"
-            access_key = access_key or os.environ.get("AWS_ACCESS_KEY_ID")
-            secret_key = secret_key or os.environ.get("AWS_SECRET_ACCESS_KEY")
-
+        # IMPORTANT: We only take what is explicitly provided in the config.
+        # We do NOT manually pull AWS_ACCESS_KEY_ID etc. from the environment.
+        # If running in AWS Lambda with an IAM Role, we omit keys entirely so 
+        # the SDK (boto3/s3fs) can handle the temporary credentials natively.
         return {
             "use_s3": use_s3,
-            "s3_endpoint": endpoint,
-            "s3_access_key": access_key,
-            "s3_secret_key": secret_key,
+            "s3_endpoint": raw.get("endpoint"),
+            "s3_access_key": raw.get("access_key"),
+            "s3_secret_key": raw.get("secret_key"),
         }
 
     def resolve_path(self, path: str) -> str:
@@ -99,10 +90,13 @@ class StorageContext:
             return None
         
         opts = {}
+        # Only pass credentials if they were explicitly provided in s3_config
         if self.s3_config.get("s3_access_key"):
             opts["key"] = self.s3_config["s3_access_key"]
         if self.s3_config.get("s3_secret_key"):
             opts["secret"] = self.s3_config["s3_secret_key"]
+        
         if self.s3_config.get("s3_endpoint"):
             opts["client_kwargs"] = {"endpoint_url": self.s3_config["s3_endpoint"]}
+            
         return opts if opts else None
