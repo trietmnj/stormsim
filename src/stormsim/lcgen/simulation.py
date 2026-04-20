@@ -61,17 +61,20 @@ def run_simulation(
     final_cols = [c for c in columns if c in combined_df.columns]
     return combined_df[final_cols]
 
-def execute_workflow(
+def run_lc_generator(
     config: Dict[str, Any], 
+    is_lambda: bool = False,
     storage_context: Optional[StorageContext] = None
 ) -> Dict[str, Any]:
-    """Full LCG workflow: Load -> Run -> Validate -> Save."""
-    
-    # Initialize StorageContext if not provided (e.g., from CLI)
-    ctx = storage_context or StorageContext(config)
+    """
+    Standard entry point for Lifecycle Generation.
+    Replaces duplicated wrappers in API and CLI scripts.
+    """
+    # Initialize StorageContext if not provided
+    ctx = storage_context or StorageContext(config, is_lambda=is_lambda)
     s3_config = ctx.s3_config
     
-    # 1. Load Data (paths resolved by StorageContext)
+    # 1. Load Data
     prob_schedule = load.load_relative_probabilities(
         ctx.get_input_path("rel_prob_file"),
         use_duckdb=config["inputs"].get("use_duckdb", False),

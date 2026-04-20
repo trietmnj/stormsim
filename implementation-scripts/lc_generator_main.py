@@ -2,7 +2,7 @@ import json
 import argparse
 from pathlib import Path
 from typing import Dict
-from stormsim import lcgen
+from stormsim.lcgen import run_lc_generator
 
 # -----------------------------
 # CONFIG LOADING
@@ -12,16 +12,6 @@ DEFAULT_CONFIG = Path("data/lcgen/config_local.json")
 def load_config(path: Path) -> Dict:
     with open(path, "r") as f:
         return json.load(f)
-
-# -----------------------------
-# CORE LOGIC
-# -----------------------------
-def run_lc_generator(config: Dict):
-    """
-    CLI Entry Point: Call the high-level library workflow.
-    """
-    # Simple CLI: Just call the workflow using the internal StorageContext for resolution.
-    return lcgen.simulation.execute_workflow(config)
 
 # -----------------------------
 # MAIN DRIVER
@@ -38,6 +28,7 @@ def main(config_path: Path):
         pr = cProfile.Profile()
         pr.enable()
 
+        # Call the library function directly
         result = run_lc_generator(config)
         print(result)
 
@@ -47,9 +38,9 @@ def main(config_path: Path):
         ps.print_stats(40)
         print(s.getvalue())
     else:
+        # Call the library function directly
         result = run_lc_generator(config)
         print(result)
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Lifecycle Generator CLI Wrapper")
