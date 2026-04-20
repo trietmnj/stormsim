@@ -5,12 +5,12 @@ from typing import Dict, Optional, Any
 class StorageContext:
     """
     Unified storage handler for StormSim.
-    Resolves Local vs. S3 paths and manages AWS credentials for
+    Resolves Local vs. S3 paths and manages AWS credentials for 
     lcgen, hydrograph_manipulator, and eurotop.
     """
     def __init__(
-        self,
-        config: Dict[str, Any],
+        self, 
+        config: Dict[str, Any], 
         s3_config_override: Optional[Dict] = None,
         is_lambda: bool = False
     ):
@@ -18,12 +18,12 @@ class StorageContext:
         self.inputs = config.get("inputs", {})
         self.outputs = config.get("outputs", {})
         self.is_lambda = is_lambda
-
-        # S3 configuration with environment fallbacks
-        self.s3_config = self._init_s3_config(s3_config_override)
-
-        # Locality resolution
+        
+        # 1. Determine locality FIRST (used by s3_config)
         self.use_local = self._determine_locality()
+
+        # 2. S3 configuration with environment fallbacks
+        self.s3_config = self._init_s3_config(s3_config_override)
 
     def _determine_locality(self) -> bool:
         if self.is_lambda:
@@ -32,12 +32,17 @@ class StorageContext:
             if is_sam_local and env_force_local:
                 return True
             return bool(self.inputs.get("use_local_inputs", False))
+        
+        # Default to S3 if use_s3 is True in inputs
         return not self.inputs.get("use_s3", False)
 
     def _init_s3_config(self, override: Optional[Dict]) -> Dict:
         raw = override or self.config.get("s3_config", {})
-        use_s3 = not self.use_local if self.is_lambda else raw.get("use_s3", False)
-
+        
+        # Logic: If we are in Lambda, we use S3 unless explicitly forced local.
+        # Otherwise, follow the config.
+        use_s3 = not self.use_local if self.is_lambda else raw.get("use_s3", self.inputs.get("use_s3", False))
+        
         endpoint = raw.get("endpoint")
         access_key = raw.get("access_key")
         secret_key = raw.get("secret_key")
@@ -84,7 +89,7 @@ class StorageContext:
             bucket = self.outputs["s3_bucket"]
             prefix = self.outputs.get("s3_prefix", "").strip("/")
             return f"s3://{bucket}/{prefix}/{filename}" if prefix else f"s3://{bucket}/{filename}"
-
+        
         out_dir = Path(self.outputs.get("local_directory", "output"))
         out_dir.mkdir(parents=True, exist_ok=True)
         return str(out_dir / filename)
@@ -92,7 +97,7 @@ class StorageContext:
     def get_pandas_storage_options(self) -> Optional[Dict]:
         if not self.s3_config.get("use_s3"):
             return None
-
+        
         opts = {}
         if self.s3_config.get("s3_access_key"):
             opts["key"] = self.s3_config["s3_access_key"]
