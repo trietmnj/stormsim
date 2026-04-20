@@ -39,13 +39,32 @@ pip install git+https://github.com/trietmnj/stormsim.git
 ```
 
 ### Library Usage
-You can now import StormSim components directly into your Python scripts:
-```python
-from stormsim.lcgen import load, sampling
-from stormsim.hydrograph_manipulator.HydroManipulator import HydroManipulator
 
-# Example: Load a config
-# config = load.load_config("path/to/config.json")
+#### High-Level Orchestration
+The simplest way to run a simulation is via the centralized `run_lc_generator` entry point. This handles data loading, simulation, and output saving.
+
+```python
+from stormsim.lcgen import run_lc_generator
+
+config = {
+    "simulation_params": { ... },
+    "inputs": { ... },
+    "outputs": { ... }
+}
+
+# Run simulation (local or cloud)
+result = run_lc_generator(config)
+```
+
+#### Smart Storage Handling
+The library includes a `StorageContext` utility that automatically resolves local vs. S3 paths and handles AWS credentials.
+
+```python
+from stormsim.utilities.storage import StorageContext
+
+ctx = StorageContext(config, is_lambda=True)
+input_path = ctx.get_input_path("rel_prob_file")
+output_path = ctx.get_output_path()
 ```
 
 ### Running Scripts
@@ -74,13 +93,10 @@ This project uses GitHub Actions to automate releases. To create a new release:
 ## Project Structure
 
 - `src/stormsim/`: Core package namespace.
-    - `lcgen/`: Lifecycle generation models.
+    - `lcgen/`: Lifecycle generation models and orchestration.
     - `hydrograph_manipulator/`: Surge/Wave alignment and processing.
     - `eurotop/`: Structure response models.
-    - `hazard_curves/`: JPM and PST/POT hazard analysis logic.
-    - `sea_level_rise/`: Sea level rise scenario generation.
-    - `noaa_py/`: NOAA data query utilities.
-    - `utilities/`: General-purpose utilities.
+    - `utilities/`: General-purpose utilities, including `storage.py` for I/O.
 - `implementation-scripts/`: Command-line drivers for each stage.
 - `lambda/`: AWS Lambda deployment packages.
 - `data/`: Input datasets and simulation outputs.
