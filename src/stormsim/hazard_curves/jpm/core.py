@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Annotated, Optional
 
 import numpy as np
+import pandas as pd
 from numpy.typing import NDArray
 from pydantic import Field, NonNegativeFloat, PositiveFloat
 from pydantic.dataclasses import dataclass
@@ -29,6 +30,7 @@ class TideEnum(CaseInsensitiveEnum):
 
 PercentileFloat = Annotated[float, Field(ge=0, le=100)]
 
+
 @dataclass
 class Options:
     # Flag values to filter out response data
@@ -38,7 +40,7 @@ class Options:
     ur: Optional[PositiveFloat] = None
     # Sea level change
     slc: NonNegativeFloat = 0.0
-    # Standard deviation for tide statistics 
+    # Standard deviation for tide statistics
     tide_std: Optional[NonNegativeFloat] = None
     # Percentile ranges for hazard curve
     percentiles: list[PercentileFloat] = Field(
@@ -156,9 +158,9 @@ class Options:
 
     def apply_confidence_limits(self, y: NDArray) -> NDArray:
 
-#        assert isinstance(self.tide_std, float)
-#        assert isinstance(self.ua, float)
-#        assert isinstance(self.ur, float)
+        #        assert isinstance(self.tide_std, float)
+        #        assert isinstance(self.ua, float)
+        #        assert isinstance(self.ur, float)
 
         match self.uncertainty_mode:
 
@@ -166,28 +168,26 @@ class Options:
                 factor = np.hypot(self.ua, self.tide_std)
 
             case UncertaintyEnum.RELATIVE:
-                a = y[:, None] * self.ur,
+                a = (y[:, None] * self.ur,)
                 b = self.tide_std
-                factor =  y[:,None]*np.hypot(a, b)
+                factor = y[:, None] * np.hypot(a, b)
 
             case UncertaintyEnum.COMBINED:
-                a = 1/self.ua 
-                b =  1 / (y[:, None] * self.ur)
+                a = 1 / self.ua
+                b = 1 / (y[:, None] * self.ur)
                 if self.tide_std == 0:
-                    factor = 1/np.hypot(a,b)
+                    factor = 1 / np.hypot(a, b)
                 else:
                     c = 1 / self.tide_std
-                    factor = 1/np.sqrt(a**2 + b**2 + c**2)
-
+                    factor = 1 / np.sqrt(a**2 + b**2 + c**2)
 
         z = norm.ppf(np.array(self.percentiles) / 100.0)
         yp = y[:, None] + z[None, :] * factor
         return np.column_stack([y, yp])
 
-
     def get_random_norm(self, n: int) -> NDArray:
         """Returns to probability distribution for tide preprocessing before integration"""
-        #assert self.tide_mode == TideEnum.PREPROCESS
+        # assert self.tide_mode == TideEnum.PREPROCESS
 
         match self.integration_mode:
             case IntegrationEnum.ATCS:
@@ -196,7 +196,7 @@ class Options:
                 return _get_gaussian_norm()
 
 
-#fmt: off
+# fmt: off
 def _get_gaussian_norm() -> NDArray:
     return np.array([
         -3.0004, -2.6927, -2.525, -2.4072, -2.3156, -2.2401, -2.1755, -2.1189,
@@ -253,4 +253,4 @@ def _get_gaussian_norm() -> NDArray:
         1.9061, 1.942, 1.9807, 2.0226, 2.0683, 2.1189, 2.1755, 2.2401, 2.3156,
         2.4072, 2.525, 2.6927, 3.0004
     ])
-#fmt:on
+# fmt: on

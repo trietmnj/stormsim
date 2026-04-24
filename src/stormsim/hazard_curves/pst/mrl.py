@@ -1,3 +1,9 @@
+"""
+Mean Residual Life (MRL) threshold selection for GPD fitting.
+Original MATLAB implementation: StormSim_MRL.m
+Authors: N.C. Nadal-Caraballo, E. Ramos-Santiago (ERDC-CHL Coastal Hazards Group)
+"""
+
 import numpy as np
 import pandas as pd
 import scipy.stats as scstats
@@ -5,181 +11,150 @@ from scipy.linalg import lstsq
 from scipy.signal import find_peaks
 
 
-def StormSim_MRL(GPD_TH_crit: int, PEAKS, Nyrs: int):
+def fit_mrl(gpd_criterion: int, peaks, n_years: float):
     """
-        SOFTWARE NAME:
-            StormSim-SST-Fit (Statistics)
+    Automated GPD threshold selection via the Mean Residual Life method.
 
-        DESCRIPTION:
-        This script applies the mean residual life (MRL) methodology to
-        objectively select the parameters of the Generalized Pareto Distribution
-        function.
+    Follows the five-step procedure from StormSim_MRL.m:
+      1. Use sorted POT values as candidate thresholds.
+      2. Estimate mean excesses e(u) and inverse-variance weights at each threshold.
+      3. Fit weighted linear model to (u, e(u)); compute WMSE at each threshold.
+      4. Smooth WMSE with kernel regression and identify local minima.
+      5. Select threshold by sample-intensity criterion (gpd_criterion=1) or
+         minimum-WMSE criterion (gpd_criterion=2).
 
-        INPUT ARGUMENTS:
-        - POT_samp: empirical distribution of the Peaks-Over-Threshold sample, as
-            computed in StormSim_SST_Fit.m
-        - Nyrs: record length in years of the input time series data set;
-            specified as a positive scalar
-
-        AUTHORS:
-            Norberto C. Nadal-Caraballo, PhD (NCNC)
-            Efrain Ramos-Santiago (ERS)
-
-        HISTORY OF REVISIONS:
-        20200903-ERS: revised.
-        20201015-ERS: revised. Updated documentation.
-        20201215-ERS: added break in for loop to avoid evaluating thresholds
-            returning excesses of same magnitude.
-        20210325-ERS: organized the threshold computation; the 3rd threshold not included
-            in the output anymore; output organized into table arrays stored in a structure array.
-        20210406-ERS: identified error when input sample size <10. When this
-            happens, an empty array is returned and the Default GPD threshold computed
-            in the three fit scripts.
-        20210412-ERS: now selecting a minima when no inflexion point exists; avoiding the script to crash.
-        20210429-ERS: now removing noise from the min WMSE through kernel
-    H        regression. Also corrected the minimum WMSE criterion based on Langousis. Removed patch
-            applied on 20210412.
-        20210430-ERS: script will stop and return empty arrays when no minima is
-            found by WRMS criterion.
-
-        ***************  ALPHA  VERSION  **  FOR INTERNAL TESTING ONLY ************
+    Returns (summary DataFrame, selection dict), or (summary, None) when no local
+    minimum is found. Raises ValueError for N <= 20.
     """
-    th = np.sort(PEAKS)  # Sort the threshold parameter in ascending order
-    N = len(th)  # Number of thresholds
+    sorted_peaks = np.sort(peaks)
+    n_peaks = len(sorted_peaks)
 
-    if N > 20:
-        mrl = np.full((N - 10, 8), np.nan)  # Pre-allocate matrix for speed
+    if n_peaks <= 20:
+        raise ValueError(f"Insufficient sample size for MRL: need >20, got {n_peaks}")
 
-        # Step 2: Estimate mean values of excesses
-        for i in range(N - 10):
-            mrl[i, 0] = th[i]  # Store threshold
-            u = PEAKS[PEAKS > th[i]]  # Sample values above threshold
-            mrl[i, 1] = np.mean(u - th[i])  # Compute mean excess
-            # mrl[i, 2] = (N - i) / np.nanvar(u - th[i])  # Compute weights
+    mrl = np.full((n_peaks - 10, 8), np.nan)
 
-            # Note: ddof=1 (degrees of freedom) for same calculation as MATLAB
-            mrl[i, 2] = (N - i - 1) / np.nanvar(
-                u - th[i], mean=mrl[i, 1], ddof=1
-            )  # Compute weights
+    # Step 2: Estimate mean values of excesses
+    for i in range(n_peaks - 10):
+        mrl[i, 0] = sorted_peaks[i]
+        exceedances = peaks[peaks > sorted_peaks[i]]
+        mrl[i, 1] = np.mean(exceedances - sorted_peaks[i])
+        # ddof=1 matches MATLAB's var()
+        mrl[i, 2] = (n_peaks - i - 1) / np.nanvar(
+            exceedances - sorted_peaks[i], mean=mrl[i, 1], ddof=1
+        )
 
-        w = mrl[:, 2].ravel()  # weights
-        sqrt_w = np.sqrt(w)
-        x = mrl[:, 0]  # threshold, u
-        # Fitting  threshold u to weighted line, m*x + c
-        x = np.stack([np.ones(N - 10), mrl[:, 0]]).T * sqrt_w[:, None]
-        y = mrl[:, 1] * sqrt_w  # weighted mean excess, e(u)
+    weights = mrl[:, 2].ravel()
+    sqrt_weights = np.sqrt(weights)
+    x_wtd = np.stack([np.ones(n_peaks - 10), mrl[:, 0]]).T * sqrt_weights[:, None]
+    y_wtd = mrl[:, 1] * sqrt_weights
 
-        filt = ~np.isnan(y)
-        # Step 3: Fit linear model and compute GPD parameters
-        #
-        for j in range(N - 20):
-            u = PEAKS[PEAKS > th[j]]  # Values above threshold
-            # Linear regression for (u, e(u))
+    valid = ~np.isnan(y_wtd)
+    # Step 3: Fit linear model and compute GPD parameters
+    for j in range(n_peaks - 20):
+        exceedances = peaks[peaks > sorted_peaks[j]]
 
-            xf = x[j:, :][filt[j:], :]
-            yf = y[j:][filt[j:]]
-            _, norm, *_ = lstsq(xf, yf)
-            # Converting from L2 norm to mean
-            mrl[j, 3] = norm / len(yf)
+        x_sub = x_wtd[j:, :][valid[j:], :]
+        y_sub = y_wtd[j:][valid[j:]]
+        _, residual_norm, *_ = lstsq(x_sub, y_sub)
+        # Converting from L2 norm to mean
+        mrl[j, 3] = residual_norm / len(y_sub)
 
-            # Fit GPD to data above threshold
-            params = scstats.genpareto.fit(u - th[j], method="MLE", floc=0)
+        # Fit GPD to data above threshold
+        gpd_params = scstats.genpareto.fit(
+            exceedances - sorted_peaks[j], method="MLE", floc=0
+        )
 
-            mrl[j, 4] = params[0]  # Shape parameter (k)
-            mrl[j, 5] = params[2]  # Scale parameter (sigma)
+        mrl[j, 4] = gpd_params[0]  # Shape parameter (k)
+        mrl[j, 5] = gpd_params[2]  # Scale parameter (sigma)
 
-        # Step 4: Estimate sample intensity (lambda)
+    # Step 4: Estimate sample intensity (lambda)
+    for k in range(len(mrl)):
+        mrl[k, 6] = np.sum(mrl[:, 0] > mrl[k, 0])
+    mrl[:, 7] = mrl[:, 6] / n_years
 
-        for k in range(len(mrl)):
-            mrl[k, 6] = np.sum(mrl[:, 0] > mrl[k, 0])  # Number of events
-        mrl[:, 7] = mrl[:, 6] / Nyrs  # Annual rate (lambda)
+    # Step 5: Threshold selection using WMSE and Sample Intensity criteria
+    mrl = mrl[~np.isnan(mrl[:, 3])]
 
-        # Step 5: Threshold selection using WMSE and Sample Intensity criteria
+    # Hardcoded to match MATLAB's kernel bandwidth for WMSE smoothing
+    bandwidth = 0.01 - 4.6613e-05
+    _, mrl[:, 3] = kern_reg_local_mean(mrl[:, 0], mrl[:, 3], bandwidth)
 
-        mrl = mrl[~np.isnan(mrl[:, 3])]  # Remove rows with NaN WMSE
+    cols = [
+        "Threshold",
+        "MeanExcess",
+        "Weight",
+        "WMSE",
+        "GPD_Shape",
+        "GPD_Scale",
+        "Events",
+        "Rate",
+    ]
+    summary = pd.DataFrame(mrl, columns=cols)
 
-        # Remove noise (smoothing using kernel density estimation)
-        H = scstats.gaussian_kde(mrl[:, 0])  # , bw_method='silverman')
+    # Identify local minima using scipy.signal.find_peaks
+    local_min_idx, _ = find_peaks(-mrl[:, 3])
+    if len(local_min_idx) < 1:
+        return summary, None
 
-        # NOTE: A guess
-        H = float(H.cho_cov) / 7
-        H = 0.01 - 4.6613e-05
-        _, mrl[:, 3] = KernReg_LocalMean(mrl[:, 0], mrl[:, 3], H)
+    mrl_at_minima = mrl[local_min_idx, :]
 
-        cols = [
-            "Threshold",
-            "MeanExcess",
-            "Weight",
-            "WMSE",
-            "GPD_Shape",
-            "GPD_Scale",
-            "Events",
-            "Rate",
-        ]
-        summary = pd.DataFrame(mrl, columns=cols)
+    if gpd_criterion == 2:
+        criterion_name = "CritWMSE"
+        # Match MATLAB: select local minimum with the smallest threshold
+        i = np.nanargmin(mrl_at_minima[:, 0])
+    else:
+        criterion_name = "CritSI"
+        rate_diff = mrl_at_minima[:, 7] - 2
+        rate_diff[rate_diff < -1] = np.nan
 
-        _, props = find_peaks(-mrl[:, 3], plateau_size=2 * np.diff(mrl[:, 0]).min())
-        TH_id = props["left_edges"]
-
-        if len(TH_id) < 1:
-            return summary, None
-
-        mrl2 = mrl[TH_id, :]
-
-        if GPD_TH_crit == 2:
-            name = "CritWMSE"
-            i = np.nanargmin(mrl[:, 0])
+        if np.all(np.isnan(rate_diff)):
+            i = np.argmax(mrl_at_minima[:, 7])
         else:
-            name = "CritSI"
-            aux = mrl2[:, 7] - 2
-            aux[aux < -1] = np.nan
+            i = np.nanargmin(np.abs(rate_diff))
 
-            if np.all(np.isnan(aux)):
-                i = np.argmax(mrl2[:, 7])
-            else:
-                i = np.nanargmin(np.abs(aux))
+    selection = {
+        "Criterion": criterion_name,
+        "Threshold": float(mrl_at_minima[i, 0]),
+        "id_Summary": int(local_min_idx[i]),
+        "Events": int(mrl_at_minima[i, 6]),
+        "Rate": float(mrl_at_minima[i, 7]),
+    }
 
-        selection = {
-            "Criterion": name,
-            "Threshold": float(mrl2[i, 0]),
-            "id_Summary": int(TH_id[i]),
-            "Events": int(mrl2[i, 6]),
-            "Rate": float(mrl2[i, 7]),
-        }
-
-        return summary, selection
+    return summary, selection
 
 
 # d-variate normal kernel
-def Kh(H, t, k):
-    return (H**-k) * (2 * np.pi) ** (k / 2) * np.exp(-0.5 * t)
+def _kernel_weight(bandwidth, sq_dist, n_dims):
+    return (bandwidth**-n_dims) * (2 * np.pi) ** (n_dims / 2) * np.exp(-0.5 * sq_dist)
 
 
-def KernReg_LocalMean(x, y, H):
-    """ """
-    x = np.asarray(x)
+def kern_reg_local_mean(x, y, bandwidth):
+    """
+    Nadaraya-Watson kernel regression (local mean) smoother.
+
+    Used to remove noise from the WMSE curve before local-minima detection,
+    matching KernReg_LocalMean.m. Bandwidth is derived from ksdensity in the
+    original MATLAB code and hard-coded here for parity.
+    """
+    x = np.atleast_2d(x).T
     y = np.asarray(y).reshape(-1)
 
-    x = x[:, np.newaxis]
-    n, k = x.shape
-    X = x.copy()
+    n_pts, n_dims = x.shape
+    x_mat = x.copy()
 
-    NN = X.shape[0]
-    Y = np.zeros(NN)
-
-    # d-variate normal kernel
-    def Kh(H, t, k):
-        return (H**-k) * (2 * np.pi) ** (k / 2) * np.exp(-0.5 * t)
+    y_out = np.zeros(n_pts)
 
     # regression loop
-    for i in range(NN):
-        # squared distances scaled by H^2
-        t = np.sum((X[i, :] - x) ** 2, axis=1) / (H**2)
+    for i in range(n_pts):
+        sq_dist = np.sum((x_mat[i, :] - x) ** 2, axis=1) / (bandwidth**2)
 
-        Xx = np.ones((n, 1))
-        Wx = np.diag(Kh(H, t, k))
+        design_mat = np.ones((n_pts, 1))
+        weight_mat = np.diag(_kernel_weight(bandwidth, sq_dist, n_dims))
 
         # (X'WX)^{-1} X'W y
-        Y[i] = np.linalg.solve(Xx.T @ Wx @ Xx, Xx.T @ Wx @ y)
+        y_out[i] = np.linalg.solve(
+            design_mat.T @ weight_mat @ design_mat, design_mat.T @ weight_mat @ y
+        ).flatten()[0]
 
-    return X, Y
+    return x_mat, y_out

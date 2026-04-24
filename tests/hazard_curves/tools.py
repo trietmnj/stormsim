@@ -4,7 +4,7 @@ import numpy as np
 import pyarrow as pa
 import scipy.io as sio
 
-from hazard_curves.common import read_parquet, save_parquet
+from stormsim.hazard_curves.common import read_parquet, save_parquet
 
 
 def matlab2parquet1d(
@@ -36,26 +36,3 @@ def jpm_matlab2parquet1d(
     data_tbl = np.column_stack([out_data[k] for k in ["HC_tbl_x", "HC_tbl"]])
     fpath = out_dpath / "jpm_output_tbl.parquet"
     save_parquet(data_tbl, schema, fpath)
-
-
-def compare1d(name: str, fpath_test: Path, fpath_target: Path) -> None:
-
-    header = f"  {name} Errors  "
-    banner = "".join(["-"] * len(header))
-    print(banner)
-    print(header)
-    print(banner)
-
-    data_test = read_parquet(fpath_test)
-    data_target = read_parquet(fpath_target)
-    diff = np.abs(data_target - data_test)
-
-    print(data_test)
-    print(data_target)
-    print(data_test.shape, data_target.shape)
-
-    print(f"Max :  {np.nanmax(diff, axis=0)}")
-    print(f"Mean: {np.nanmean(diff, axis=0)}")
-    print(f"84% : {np.nanpercentile(diff, 84, axis=0)}")
-    print(f"90% : {np.nanpercentile(diff, 90, axis=0)}")
-    print(f"98% : {np.nanpercentile(diff, 98, axis=0)}")
