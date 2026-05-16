@@ -1,8 +1,7 @@
 import numpy as np
 import os
 import pandas as pd
-import pyarrow as pa
-from stormsim.hazard_curves import jpm
+from stormsim.hazard_curves.jpm import run_jpm
 from stormsim.hydrograph_manipulator.HydroManipulator import HydroManipulator
 from stormsim.utilities.chg_utils import get_aef, prep_frequency
 
@@ -73,42 +72,32 @@ def main():
         # for the row index of the requested savepoint by using the grid for the study.
         # --------------------------------
         
-        # Define Dummy Datetime Data 
-        dtime = np.zeros_like(sp_resp)
-        # Define No Skew Tides 
-        no_skew = np.zeros_like(sp_resp)
-        # Build JPM Data Input 
+        # Build JPM Data Input
         jpm_in = np.column_stack([np.zeros_like(sp_resp), sp_resp, np.zeros_like(sp_resp), dsw.flatten()])
-        # Define Schema
-        schema = [
-            ("datetime", pa.float32()),
-            ("response_wo_tides", pa.float32()),
-            ("response_skew_tides", pa.float32()),
-            ("discrete_storm_weights", pa.float32())]
-        # Write Input Parquet 
-        jpm.save_parquet(jpm_in, schema, os.path.join(out_dir, f"jpm_input.parquet"))
+        jpm_input_path = os.path.join(out_dir, "jpm_input.parquet")
+        pd.DataFrame(jpm_in, columns=["datetime", "response_wo_tides", "response_skew_tides", "discrete_storm_weights"]).to_parquet(jpm_input_path, index=False)
 
         # --------------------
         # Step 3: Define JPM Integration Options & Compute HC
         # -------------------
         # Integartion Methods: ITCS -> Use For Surge, Hm0, Tp | ATCS -> Use for other responses. You Need to supply the replicates (StormSim: PROS)
-        # Define JPM Options
-        opts = jpm.Options(
-            flag_value=[],
-            ua=study_grid.loc[study_grid["sp_id"] == sp, "ua"].iloc[0],
-            ur=study_grid.loc[study_grid["sp_id"] == sp, "ur"].iloc[0],
-            #    tide_std=0.1,
-            integration_mode="ITCS",
-            uncertainty_mode="combined",
-            tide_mode="none",
-            skewed=False,
-            percentiles=[16, 84],
-            output_path=out_dir,
-            return_table=True,
-            use_aep=False,
-        )
-        # Compute HC
-        jpm.compute(os.path.join(out_dir, f"jpm_input.parquet"), 'response', opts, plt_opts=None)
+        config = {
+            "inputs": {"data_file": jpm_input_path},
+            "outputs": {"local_directory": out_folder, "filename": f"sp{int(sp)}"},
+            "jpm_options": {
+                "flag_value": [],
+                "ua": study_grid.loc[study_grid["sp_id"] == sp, "ua"].iloc[0],
+                "ur": study_grid.loc[study_grid["sp_id"] == sp, "ur"].iloc[0],
+                "integration_mode": "ITCS",
+                "uncertainty_mode": "combined",
+                "tide_mode": "none",
+                "skewed": False,
+                "percentiles": [16, 84],
+                "return_table": True,
+                "use_aep": False,
+            },
+        }
+        run_jpm(config)
 
         # --------------------
         # Step 4: Estimate TC Storm Suite AEF
@@ -122,13 +111,11 @@ def main():
             sp_bench_hc,
             dsw
             ) # stormID, aef, response
-        # Define Schema For Parquet
-        schema2 = [
-        ("storm_id", pa.int32()),
-        ("aef", pa.float32()),
-        ("response", pa.float32())]
         # Write Out Peak Response To AEF Mapping
-        jpm.save_parquet(np.column_stack(list(ss_aef_map.values())), schema2, os.path.join(out_dir, f"tc_storms_peak_aef.parquet"))
+        pd.DataFrame(
+            np.column_stack(list(ss_aef_map.values())),
+            columns=["storm_id", "aef", "response"],
+        ).to_parquet(os.path.join(out_dir, "tc_storms_peak_aef.parquet"), index=False)
 
 
 
