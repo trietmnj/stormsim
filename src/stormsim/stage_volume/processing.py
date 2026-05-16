@@ -1,38 +1,67 @@
-import numpy as np
-import rasterio
-from rasterio.mask import mask
+from pathlib import Path
+from typing import Any, Optional
+
 import geopandas as gpd
-from scipy.optimize import brentq
+import numpy as np
+import pandas as pd
+import rasterio
 from pydantic import BaseModel, Field
-from typing import Optional
+from rasterio.mask import mask
+from scipy.optimize import brentq
+
+from ..utilities.storage import StorageContext
 
 
 class StageVolumeConfig(BaseModel):
-    dem_path: str
     stage_units: str = Field(default="feet", pattern="^(feet|meters)$")
     dem_vertical_units: str = Field(default="meters", pattern="^(feet|meters)$")
 
 
 class StageVolumeCalculator:
-    def __init__(self, config: StageVolumeConfig, model_area_gdf: gpd.GeoDataFrame):
-        self.config = config
-        with rasterio.open(self.config.dem_path) as src:
-            out_image, out_transform = mask(src, model_area_gdf.geometry, crop=True)
-            self.dem_data = out_image[0]
-            self.nodata = src.nodata
-            self.cell_area_m2 = abs(out_transform[0] * out_transform[4])
-            self.valid_mask = self.dem_data != self.nodata
+    """
+    Pure stage-volume compute class. Accepts pre-loaded DEM arrays;
+    file I/O is handled by run_stage_volume.
+    """
 
-            # Normalize internal elevation to meters once during initialization
-            if self.config.dem_vertical_units == "feet":
-                self.dem_data = self.dem_data * 0.3048
+    def __init__(
+        self,
+        dem_data: np.ndarray,
+        nodata: float,
+        cell_area_m2: float,
+        config: StageVolumeConfig,
+    ):
+        self.config = config
+        self.cell_area_m2 = cell_area_m2
+        self.dem_data = dem_data.copy().astype(float)
+        self.valid_mask = self.dem_data != nodata
+
+        if config.dem_vertical_units == "feet":
+            self.dem_data[self.valid_mask] *= 0.3048
+
+        # Flat array of valid elevations (metres) — avoids broadcasting the full
+        # 2D DEM on every call, which matters when nodata coverage is large.
+        self._valid_elev = self.dem_data[self.valid_mask]
+
+        # Precomputed unit conversion: stage units → metres
+        self._stage_to_m = 0.3048 if config.stage_units == "feet" else 1.0
+
+        # Brentq search bounds in stage units, derived from DEM elevation range.
+        # Lower bound sits below the minimum elevation (zero volume); upper bound
+        # sits above the maximum (all valid cells flooded).
+        to_stage = 1.0 / self._stage_to_m
+        self._brentq_lo = float(self._valid_elev.min()) * to_stage - 1.0
+        self._brentq_hi = float(self._valid_elev.max()) * to_stage + 1.0
 
     def _calc_vol(self, stage: float) -> float:
-        """Internal helper to calculate volume for a single stage."""
-        stage_meters = stage * 0.3048 if self.config.stage_units == "feet" else stage
-        depth_map_m = stage_meters - self.dem_data
-        flood_mask = self.valid_mask & (depth_map_m > 0)
-        return np.sum(depth_map_m[flood_mask]) * self.cell_area_m2
+        depth = stage * self._stage_to_m - self._valid_elev
+        return float(np.sum(np.clip(depth, 0, None)) * self.cell_area_m2)
+
+    def _calc_vol_batch(self, stages: np.ndarray) -> np.ndarray:
+        """Vectorised stage→volume for multiple stages at once."""
+        stages_m = np.asarray(stages, dtype=float) * self._stage_to_m
+        # (n_stages, N_valid) — works on valid cells only, not the full 2D DEM
+        depth = stages_m[:, None] - self._valid_elev[None, :]
+        return np.sum(np.clip(depth, 0, None), axis=1) * self.cell_area_m2
 
     def get_relationship(
         self,
@@ -40,27 +69,77 @@ class StageVolumeCalculator:
         stop: Optional[float] = None,
         n: int = 1,
         volume_to_stage: bool = False,
-    ):
+    ) -> list[dict]:
         """
-        Calculates stage-volume relationships.
+        Compute stage-volume pairs over a range.
 
-        Args:
-            start: Start value of the range (stage or volume).
-            stop: Stop value of the range (stage or volume). Defaults to start.
-            n: Number of equidistant points.
-            volume_to_stage: If True, calculate stage from target volume.
+        Always returns a list of dicts with keys 'stage' and 'volume'.
         """
         if stop is None:
             stop = start
 
-        range_vals = np.linspace(start, stop, n) if n > 1 else [start]
+        range_vals = np.linspace(start, stop, n) if n > 1 else np.array([start])
+
+        if not volume_to_stage:
+            volumes = self._calc_vol_batch(range_vals)
+            return [{"stage": float(s), "volume": float(v)} for s, v in zip(range_vals, volumes)]
 
         results = []
-        for val in range_vals:
-            if not volume_to_stage:
-                results.append({"stage": val, "volume": self._calc_vol(val)})
-            else:  # volume_to_stage
-                stage = brentq(lambda s: self._calc_vol(s) - val, -100, 100.0)
-                results.append({"stage": stage, "volume": val})
+        for vol in range_vals:
+            stage = brentq(lambda s: self._calc_vol(s) - vol, self._brentq_lo, self._brentq_hi)
+            results.append({"stage": stage, "volume": float(vol)})
+        return results
 
-        return results[0] if n == 1 else results
+
+def run_stage_volume(
+    config: dict[str, Any],
+    is_lambda: bool = False,
+    storage_context: StorageContext | None = None,
+) -> dict[str, Any]:
+    """
+    Standard entry point for stage-volume computation.
+    Loads inputs via StorageContext, runs compute, writes output.
+
+    Output files written to the configured output directory:
+      stage_volume.parquet — stage/volume pairs; columns: stage, volume
+
+    Config keys under 'stage_volume_params':
+      stage_units        — 'feet' or 'meters' (default: 'feet')
+      dem_vertical_units — 'feet' or 'meters' (default: 'meters')
+      start              — start of stage (or volume) range
+      stop               — end of range (defaults to start)
+      n                  — number of evenly spaced points (default: 1)
+      volume_to_stage    — if True, invert: compute stage from target volume
+    """
+    ctx = storage_context or StorageContext(config, is_lambda=is_lambda)
+
+    dem_path = ctx.get_input_path("dem_file")
+    area_path = ctx.get_input_path("model_area_file")
+
+    model_area_gdf = gpd.read_file(area_path)
+    with rasterio.open(dem_path) as src:
+        out_image, out_transform = mask(src, model_area_gdf.geometry, crop=True)
+        dem_data = out_image[0]
+        nodata = src.nodata
+        cell_area_m2 = abs(out_transform[0] * out_transform[4])
+
+    sv_params = config.get("stage_volume_params", {})
+    sv_config = StageVolumeConfig(
+        stage_units=sv_params.get("stage_units", "feet"),
+        dem_vertical_units=sv_params.get("dem_vertical_units", "meters"),
+    )
+
+    calc = StageVolumeCalculator(dem_data, nodata, cell_area_m2, sv_config)
+    results = calc.get_relationship(
+        start=sv_params["start"],
+        stop=sv_params.get("stop"),
+        n=sv_params.get("n", 1),
+        volume_to_stage=sv_params.get("volume_to_stage", False),
+    )
+
+    out_dir = Path(ctx.get_output_path())
+    out_dir.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(results).to_parquet(out_dir / "stage_volume.parquet", index=False)
+
+    print(f"Stage-volume outputs written to {out_dir}")
+    return {"status": "success", "output": str(out_dir)}

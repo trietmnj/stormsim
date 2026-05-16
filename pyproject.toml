@@ -20,6 +20,9 @@ dependencies = [
     "s3fs",
     "python-dotenv",
     "pyarrow",
+    "pydantic>=2.10.6",
+    "rasterio",
+    "geopandas",
 ]
 
 [project.urls]
