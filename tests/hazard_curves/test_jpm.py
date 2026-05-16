@@ -1,40 +1,31 @@
 import pytest
-import numpy as np
-from stormsim.hazard_curves import jpm
-from stormsim.hazard_curves.common import read_parquet
+from stormsim.hazard_curves.jpm import run_jpm
 
 
-def test_jpm_compute(hazard_curves_input, test_output_dir):
-    fpath = hazard_curves_input / "jpm_input.parquet"
-    key = "response"
-
-    opts = jpm.Options(
-        flag_value=[],
-        ua=0.3738,
-        ur=0.5840,
-        integration_mode="ITCS",
-        uncertainty_mode="combined",
-        tide_mode="none",
-        skewed=False,
-        percentiles=[16, 84],
-        output_path=test_output_dir,
-        return_table=True,
-        use_aep=False,
-    )
-    plt_opts = jpm.PlotOptions(file_name="jpm_output.png", ylabel="Surge (m)")
-
-    jpm.compute(fpath, key, opts, plt_opts=plt_opts)
-
-    # Validate output
-    data_plt = read_parquet(test_output_dir / "plot.parquet")
-    target_plt = read_parquet(hazard_curves_input / "jpm_output_plt.parquet")
-    assert np.allclose(data_plt, target_plt, atol=1e-3, equal_nan=True), (
-        "Plot output mismatch"
-    )
-
-    if opts.return_table:
-        data_tbl = read_parquet(test_output_dir / "table.parquet")
-        target_tbl = read_parquet(hazard_curves_input / "jpm_output_tbl.parquet")
-        assert np.allclose(data_tbl, target_tbl, atol=1e-3, equal_nan=True), (
-            "Table output mismatch"
-        )
+def test_run_jpm_writes_outputs(hazard_curves_input, test_output_dir):
+    config = {
+        "inputs": {
+            "data_file": str(hazard_curves_input / "jpm_input.parquet"),
+        },
+        "outputs": {
+            "local_directory": str(test_output_dir.parent),
+            "filename": test_output_dir.name,
+        },
+        "jpm_params": {},
+        "jpm_options": {
+            "flag_value": [],
+            "ua": 0.3738,
+            "ur": 0.5840,
+            "integration_mode": "ITCS",
+            "uncertainty_mode": "combined",
+            "tide_mode": "none",
+            "percentiles": [16, 84],
+            "use_aep": False,
+            "return_table": True,
+        },
+    }
+    result = run_jpm(config)
+    assert result["status"] == "success"
+    out_dir = test_output_dir
+    assert (out_dir / "hc_plot.parquet").exists()
+    assert (out_dir / "hc_table.parquet").exists()

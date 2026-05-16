@@ -1,4 +1,4 @@
-# from .jpm import StormSim_JPM
 from .core import Options
-from .jpm import compute
+from .compute import compute
+from .simulation import run_jpm
 from .plot import PlotOptions

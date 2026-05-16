@@ -28,18 +28,36 @@ def _pst_convert(mat_path: Path, out_dir: Path) -> None:
         print(f"Failed to convert {mat_path.name}: {e}")
 
 
+def _jpm_convert(mat_path: Path, out_dir: Path) -> None:
+    try:
+        mat_content = sio.loadmat(mat_path, struct_as_record=False, squeeze_me=True)
+        data = mat_content.get("data")
+        df = pd.DataFrame(data)
+        out_path = out_dir / mat_path.with_suffix(".parquet").name
+        df.to_parquet(out_path)
+        print(f"Converted {mat_path.name} -> {out_path}")
+    except Exception as e:
+        print(f"Failed to convert {mat_path.name}: {e}")
+
+
 def run_conversion():
     matlab_dpath = Path(__file__).parent / "matlab_data"
     repo_root = Path(__file__).parents[2]
 
-    # PST: convert all .mat files in matlab_data to data/hazard_curves/pst/
+    # PST: convert *_pst_*.mat files in matlab_data to data/hazard_curves/pst/
     pst_out = repo_root / "data" / "hazard_curves" / "pst"
     pst_out.mkdir(parents=True, exist_ok=True)
-    for mat_file in matlab_dpath.glob("*.mat"):
+    for mat_file in sorted(matlab_dpath.glob("*_pst_*.mat")):
         _pst_convert(mat_file, pst_out)
 
-    # JPM
-    jpm_in = matlab_dpath
+    # JPM intermediates: convert *_jpm_*.mat files to data/hazard_curves/jpm/
+    jpm_data_out = repo_root / "data" / "hazard_curves" / "jpm"
+    jpm_data_out.mkdir(parents=True, exist_ok=True)
+    for mat_file in sorted(matlab_dpath.glob("*_jpm_*.mat")):
+        _jpm_convert(mat_file, jpm_data_out)
+
+    # JPM input/output for existing test fixtures (source files live in bak/)
+    jpm_in = matlab_dpath / "bak"
     jpm_out = Path(__file__).parent / "input_data"
     jpm_out.mkdir(exist_ok=True)
 

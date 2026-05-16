@@ -1,8 +1,12 @@
-from pathlib import Path
+"""
+Input options dataclass and enumerations for the StormSim-JPM pipeline.
+Original MATLAB implementation: StormSim_JPM.m
+Authors: N.C. Nadal-Caraballo, E. Ramos-Santiago (ERDC-CHL Coastal Hazards Group)
+"""
+
 from typing import Annotated, Optional
 
 import numpy as np
-import pandas as pd
 from numpy.typing import NDArray
 from pydantic import Field, NonNegativeFloat, PositiveFloat
 from pydantic.dataclasses import dataclass
@@ -12,17 +16,20 @@ from ..common import CaseInsensitiveEnum
 
 
 class IntegrationEnum(CaseInsensitiveEnum):
+    """PCHA ATCS (augmented, random uncertainty) or PCHA ITCS (standard, discrete Gaussian)."""
     ATCS = 1
     ITCS = 2
 
 
 class UncertaintyEnum(CaseInsensitiveEnum):
+    """Which uncertainty components (absolute U_a, relative U_r, or both) to apply."""
     ABSOLUTE = 1
     RELATIVE = 2
     COMBINED = 3
 
 
 class TideEnum(CaseInsensitiveEnum):
+    """How tidal uncertainty is applied: excluded, added to confidence limits, or added to response."""
     NONE = 1
     COMBINED = 2
     PREPROCESS = 3
@@ -33,38 +40,36 @@ PercentileFloat = Annotated[float, Field(ge=0, le=100)]
 
 @dataclass
 class Options:
-    # Flag values to filter out response data
-    flag_value: Optional[list[float]] = None
-    # Uncertainty parameters
-    ua: Optional[PositiveFloat] = None
-    ur: Optional[PositiveFloat] = None
-    # Sea level change
-    slc: NonNegativeFloat = 0.0
-    # Standard deviation for tide statistics
-    tide_std: Optional[NonNegativeFloat] = None
-    # Percentile ranges for hazard curve
+    """
+    Algorithmic options controlling the JPM fitting pipeline.
+
+    Mirrors the jpm_options and response_data fields from jpm_call_example.m.
+    __post_init__ enforces cross-field constraints and applies ITCS uncertainty
+    partitioning in-place (ua and ur are modified to hold their residual values
+    after subtracting the first-partition share p1_a / p1_r).
+
+    data columns expected: [timestamp, response (no tides), skew_tides, DSW]
+    """
+    flag_value: Optional[list[float]] = None   # sentinel values to exclude before fitting
+    ua: Optional[PositiveFloat] = None         # absolute model error (same units as response)
+    ur: Optional[PositiveFloat] = None         # relative model error (dimensionless fraction)
+    slc: NonNegativeFloat = 0.0                # sea level change implicit in surge (metres)
+    tide_std: Optional[NonNegativeFloat] = None  # tide uncertainty standard deviation
     percentiles: list[PercentileFloat] = Field(
         default=[2.28, 15.87, 84.13, 97.72], min_length=1, max_length=4
     )
     integration_mode: IntegrationEnum = IntegrationEnum.ATCS
     uncertainty_mode: UncertaintyEnum = UncertaintyEnum.COMBINED
     tide_mode: TideEnum = TideEnum.COMBINED
-    skewed: Optional[bool] = None
-    # Use AEP instead of return periods for x-axis
-    use_aep: bool = False
-    # Compute hazard curve in table form
-    return_table: bool = False
-    output_path: Path | str = Path()
-    # Partition uncertainties
-    # Note: Changed hard-coded values to 'hidden' options
+    skewed: Optional[bool] = None  # True = add skew-tide column directly to response
+    use_aep: bool = False          # express frequencies as AEP instead of AEF
+    return_table: bool = False     # also interpolate onto discrete return-period table grid
+    # First-partition share of ua/ur removed from response before CL application (ITCS only)
     _p1_a: PositiveFloat = 0.1
     _p1_r: PositiveFloat = 0.1
 
     def __post_init__(self):
-        """Advance validation of arguments combinations"""
-        if isinstance(self.output_path, str):
-            self.output_path = Path(self.output_path)
-
+        """Validate cross-field argument combinations and apply ITCS uncertainty partitioning."""
         # Validating tide mode arguments
         match self.tide_mode:
             case TideEnum.NONE:
@@ -101,7 +106,7 @@ class Options:
             case _:
                 # Safety check
                 raise NotImplementedError(
-                    f"Unsupported enum value '{self.name}' for IntegrationEnum."
+                    f"Unsupported enum value '{self.tide_mode}' for TideEnum."
                 )
 
         # Validating uncertainty mode arguments
@@ -146,9 +151,9 @@ class Options:
                 pname = f"_p1_{suffix}"
                 p1 = getattr(self, pname)
 
-                check = u**2 - p1**2
-                if check > 0:
-                    u = np.sqrt(check)
+                residual = u**2 - p1**2
+                if residual > 0:
+                    u = np.sqrt(residual)
                     setattr(self, uname, u)
 
         check("a", ua_required)
@@ -157,13 +162,15 @@ class Options:
         self.percentiles = sorted(self.percentiles)
 
     def apply_confidence_limits(self, y: NDArray) -> NDArray:
+        """
+        Apply Normal z-score confidence limits to the best-estimate response curve.
 
-        #        assert isinstance(self.tide_std, float)
-        #        assert isinstance(self.ua, float)
-        #        assert isinstance(self.ur, float)
-
+        Computes the combined uncertainty factor from ua, ur, and tide_std according
+        to the selected uncertainty_mode (absolute, relative, or combined harmonic mean).
+        Returns column_stack([y, y + z * factor]) where z are the Normal quantiles
+        for each requested percentile.
+        """
         match self.uncertainty_mode:
-
             case UncertaintyEnum.ABSOLUTE:
                 factor = np.hypot(self.ua, self.tide_std)
 
@@ -186,9 +193,13 @@ class Options:
         return np.column_stack([y, yp])
 
     def get_random_norm(self, n: int) -> NDArray:
-        """Returns to probability distribution for tide preprocessing before integration"""
-        # assert self.tide_mode == TideEnum.PREPROCESS
+        """
+        Return the normal distribution replicates used for uncertainty/tide application.
 
+        ATCS: n independent standard-normal draws (random, non-deterministic).
+        ITCS: fixed 444-point discrete Gaussian (deterministic, matches discrete_norm_444.txt).
+        The ITCS path is independent of n — the 444 points are tiled over storms in preprocess.
+        """
         match self.integration_mode:
             case IntegrationEnum.ATCS:
                 return np.random.randn(n)

@@ -1,4 +1,2 @@
-# from .jpm import StormSim_JPM as StormSim_JPM
-
-from .jpm import jpm
+from .jpm import compute as jpm_compute, run_jpm
 from .pst import compute as pst_compute

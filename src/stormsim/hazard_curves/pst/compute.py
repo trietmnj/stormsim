@@ -3,8 +3,10 @@ import datetime
 import numpy as np
 
 from ..common import bool_check
+from .cleaner import clean_pot_data
 from .core import PSTOptions, ResponseData
 from .fit import fit_hazard_curve
+from .utils import add_noise_to_duplicates
 
 
 def validate_inputs(response_data: ResponseData, pst_options: PSTOptions):
@@ -100,19 +102,8 @@ def compute(
         data_invalid = data.size == 0
 
     else:
-        if response_data.flag_value is not None:
-            mask = np.ones(len(data), dtype=bool)
-            for flag_val in response_data.flag_value:
-                mask &= ~(data[:, 1:] == flag_val).any(axis=1)
-            data = data[mask]
-
-        response_cols = data[:, 1:]
-        valid = (
-            (~np.isnan(response_cols) & ~np.isinf(response_cols)) & (response_cols > 0)
-        ).any(axis=1)
-        data = data[valid]
-
-        data_invalid = len(np.unique(data[:, 1])) <= 3
+        data = clean_pot_data(data, flag_value=response_data.flag_value)
+        data_invalid = False
 
     if data_invalid:
         raise ValueError("Data cleaning removed all values. Aborting PST.")
@@ -120,11 +111,7 @@ def compute(
     if response_data.data_type == "Timeseries":
         raise NotImplementedError("Timeseries SST")
 
-    pot_sample = data
-
-    _, unique_idx = np.unique(pot_sample[:, 1], return_index=True)
-    dup = np.setdiff1d(np.arange(len(pot_sample)), unique_idx)
-    pot_sample[dup, 1] += 1e-6
+    pot_sample = add_noise_to_duplicates(data.copy(), col_idx=1)
 
     hc_output, mrl_output = fit_hazard_curve(
         pot_sample[:, 1],

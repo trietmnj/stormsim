@@ -1,3 +1,9 @@
+"""
+Hazard curve plotting for the StormSim-JPM pipeline.
+Original MATLAB implementation: StormSim_JPM_plot.m
+Authors: N.C. Nadal-Caraballo, E. Ramos-Santiago (ERDC-CHL Coastal Hazards Group)
+"""
+
 from pathlib import Path
 
 import numpy as np
@@ -26,7 +32,7 @@ class PlotOptions:
 
     _LINE_STYLES_ = ["--", "-.", ":", (0, (3, 1, 1, 1, 1, 1))]
 
-    def plot(self, data: NDArray, opts: Options) -> None:
+    def plot(self, data: NDArray, opts: Options, output_path: Path | None = None) -> None:
 
         figsize = (self.width, self.height)
         fig, ax = plt.subplots(1, 1, figsize=figsize)
@@ -68,7 +74,8 @@ class PlotOptions:
             loc=self.legend_location, fontsize=self.legend_fontsize, ncols=(n + 1)
         )
         if self.close_fig:
-            fpath = opts.output_path / self.file_name
+            base = output_path if output_path is not None else Path()
+            fpath = base / self.file_name
             plt.savefig(fpath, dpi=self.dpi, bbox_inches="tight")
             plt.close()
         else:
