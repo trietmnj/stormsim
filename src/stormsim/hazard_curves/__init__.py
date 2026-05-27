@@ -1,2 +1,3 @@
 from .jpm import jpm
-from .pst import StormSim_PST as StormSim_PST
+from .pst import pst
+from .pst import StormSim_PST  # backward-compat

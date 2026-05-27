@@ -3,7 +3,7 @@ import scipy.io as sio
 import tables
 from pathlib import Path
 
-from stormsim.hazard_curves import StormSim_PST
+from stormsim.hazard_curves import pst
 
 data_dpath = Path(__file__).parents[5] / "tests" / "hazard_curves" / "data"
 
@@ -40,19 +40,16 @@ pst_options = dict(
     ind_Skew=0,
     use_AEP=0,
     prc=[16, 84],
-    stat_print=1,
     tLag=0,
     GPD_TH_crit=2,
     apply_GPD_to_SS=1,
     bootstrap_sims=100,
 )
 
-plot_options = dict(
-    create_plots=1, staID="SSL", yaxis_Label="Surge [m]", y_log=0, path_out=""
-)
-
-SST_Outputs, MRL_Output = StormSim_PST(
-    response, pst_options, test_ecdf_data=test_data
+SST_Outputs, MRL_Output = pst.compute(
+    pst.ResponseData(**response),
+    pst.Options(**pst_options),
+    test_ecdf_data=test_data,
 )
 
 

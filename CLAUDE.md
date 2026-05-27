@@ -119,13 +119,14 @@ Each stage exposes a single callable exported from its `__init__.py`:
 ```python
 from stormsim.lcgen import run_lc_generator
 from stormsim.eurotop import run_eurotop, aggregate_q
-from stormsim.hazard_curves import jpm, StormSim_PST
+from stormsim.hazard_curves import jpm, pst
 
 result = run_lc_generator(config)
 result = run_eurotop(config)
 aggregate_q("data/outputs/eurotop")          # writes to .../aggregate_responses/
-jpm.compute(fpath, key, opts)
-StormSim_PST(response_dict, options_dict)
+
+jpm.compute(fpath, key, jpm.Options(...))
+pst.compute(pst.ResponseData(...), pst.Options(...))
 ```
 
 ### DuckDB for Data Loading
@@ -136,10 +137,28 @@ between local CSV/parquet files and S3 objects. Enable via
 
 ### Hazard Curves (JPM / PST)
 
-Both modules use pydantic dataclasses for options validation. `IntegrationEnum`,
-`UncertaintyEnum`, and `TideEnum` accept integer, case-insensitive string, or
-enum values. `StormSim_PST` takes two positional dicts (`response_data`,
-`pst_options`) — the old `plot_options` third argument has been removed.
+Both modules follow the same pattern — `<module>.compute(data, opts)` where
+`opts` is a typed dataclass containing `output_path`:
+
+```python
+from stormsim.hazard_curves import jpm, pst
+
+# JPM — reads from a parquet file
+opts = jpm.Options(ua=0.37, ur=0.58, integration_mode="ITCS",
+                   output_path="data/outputs/jpm")
+jpm.compute("path/to/input.parquet", "response", opts)
+
+# PST — takes pre-extracted POT samples as a numpy array
+response = pst.ResponseData(data=arr, DataType="POT", Nyrs=75, SLC=0,
+                             flag_value=[], gprMdl=[])
+opts = pst.Options(prc=[16, 84], GPD_TH_crit=2, apply_GPD_to_SS=1,
+                   output_path="data/outputs/pst")
+sst_out, mrl_out = pst.compute(response, opts)
+```
+
+`jpm.Options` uses pydantic and accepts enums as int, string, or enum value.
+`pst.Options` and `pst.ResponseData` are plain dataclasses; both `compute`
+functions also accept raw dicts for backward compatibility.
 
 ## Tests
 
