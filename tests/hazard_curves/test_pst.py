@@ -3,13 +3,9 @@ import numpy as np
 import scipy.io as sio
 import tables
 
-from hazard_curves import StormSim_PST
+from stormsim.hazard_curves import StormSim_PST
 
-# Get path to the data and legacy directories relative to this file
 data_dpath = Path(__file__).parent / "data"
-legacy_matlab_dpath = Path(__file__).parent.parent.parent / "src/hazard_curves/legacy/matlab"
-
-data_fpath = legacy_matlab_dpath / "SSv1.0_Forced_Sta50_2195_CHS-NA_SP6021.mat"
 
 file = tables.open_file(data_dpath / "processed_data.mat")
 Nyrs_XC = file.root.Nyrs_XC[:][0, 0]
@@ -60,7 +56,7 @@ plot_options = dict(
 )
 
 SST_Outputs, MRL_Output = StormSim_PST(
-    response, pst_options, plot_options, test_ecdf_data=test_data
+    response, pst_options, test_ecdf_data=test_data
 )
 
 
@@ -74,22 +70,20 @@ def err_stats(name, val, trg):
     print(np.nanpercentile(error, [50, 75, 90, 99], axis=0).T)
 
 
-summary = sio.loadmat("./data/pst_summary.mat")["data"]
+summary = sio.loadmat(data_dpath / "pst_summary.mat")["data"]
 err_stats("Summary", summary, MRL_Output["summary"].values)
 
-# selection = sio.loadmat("./data/pst_selection.mat")  # ["data"]
-
-hc_plt_x = sio.loadmat("./data/pst_hc_plt_x.mat")["data"][:, 0]
+hc_plt_x = sio.loadmat(data_dpath / "pst_hc_plt_x.mat")["data"][:, 0]
 err_stats("HC_plt_x", hc_plt_x, SST_Outputs["HC_plt_x"])
 
-hc_plt = sio.loadmat("./data/pst_hc_plt.mat")["data"]
+hc_plt = sio.loadmat(data_dpath / "pst_hc_plt.mat")["data"]
 err_stats("HC_plt", hc_plt, SST_Outputs["HC_plt"])
 
-hc_emp = sio.loadmat("./data/pst_hc_emp.mat")["data"]
+hc_emp = sio.loadmat(data_dpath / "pst_hc_emp.mat")["data"]
 err_stats("HC_emp", hc_emp, SST_Outputs["HC_emp"])
 
-pd_k_wOut = sio.loadmat("./data/pst_pd_k_wOut.mat")["data"]
+pd_k_wOut = sio.loadmat(data_dpath / "pst_pd_k_wOut.mat")["data"]
 err_stats("pd_k_wOut", pd_k_wOut, MRL_Output["pd_k_wOut"])
 
-pd_k_mod = sio.loadmat("./data/pst_pd_k_mod.mat")["data"]
+pd_k_mod = sio.loadmat(data_dpath / "pst_pd_k_mod.mat")["data"]
 err_stats("pd_k_mod", pd_k_mod, MRL_Output["pd_k_mod"])

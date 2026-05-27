@@ -99,10 +99,6 @@ def StormSim_MRL(GPD_TH_crit: int, PEAKS, Nyrs: int):
         mrl = mrl[~np.isnan(mrl[:, 3])]  # Remove rows with NaN WMSE
 
         # Remove noise (smoothing using kernel density estimation)
-        H = scstats.gaussian_kde(mrl[:, 0])  # , bw_method='silverman')
-
-        # NOTE: A guess
-        H = float(H.cho_cov) / 7
         H = 0.01 - 4.6613e-05
         _, mrl[:, 3] = KernReg_LocalMean(mrl[:, 0], mrl[:, 3], H)
 
@@ -180,6 +176,6 @@ def KernReg_LocalMean(x, y, H):
         Wx = np.diag(Kh(H, t, k))
 
         # (X'WX)^{-1} X'W y
-        Y[i] = np.linalg.solve(Xx.T @ Wx @ Xx, Xx.T @ Wx @ y)
+        Y[i] = np.linalg.solve(Xx.T @ Wx @ Xx, Xx.T @ Wx @ y).item()
 
     return X, Y

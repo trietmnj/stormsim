@@ -1,4 +1,5 @@
 
+from dataclasses import fields
 from enum import Enum
 from pathlib import Path
 

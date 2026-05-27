@@ -4,7 +4,7 @@ import numpy as np
 import pyarrow as pa
 import scipy.io as sio
 
-from hazard_curves.common import read_parquet, save_parquet
+from stormsim.hazard_curves.common import read_parquet, save_parquet
 
 
 def matlab2parquet1d(

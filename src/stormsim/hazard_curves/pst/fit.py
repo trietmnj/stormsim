@@ -3,7 +3,7 @@ import pandas as pd
 import scipy.stats as scstats
 from scipy import interpolate
 
-from ..common import aef2aep, get_grid_values
+from ..common import aef2aep, get_grid_values_v1 as get_grid_values
 from .core import PSTOptions
 from .mrl import StormSim_MRL
 

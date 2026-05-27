@@ -1,6 +1,6 @@
 [project]
 name = "stormsim"
-version = "0.1.6"
+version = "0.1.7"
 description = "A modular coastal storm simulation system for synthetic storm lifecycles and physical impact modeling."
 readme = "README.md"
 authors = [
@@ -20,6 +20,8 @@ dependencies = [
     "s3fs",
     "python-dotenv",
     "pyarrow",
+    "pydantic>=2.10.6",
+    "matplotlib>=3.7.5",
 ]
 
 [project.urls]
@@ -33,3 +35,9 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["stormsim*"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5",
+    "tables>=3.8.0",
+]

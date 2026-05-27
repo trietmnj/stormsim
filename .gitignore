@@ -19,3 +19,5 @@ mock-plugin/seed/*.gpkg
 mock-plugin/seed/damage-functions.json
 
 *.mat
+
+tests/hazard_curves/test_output/

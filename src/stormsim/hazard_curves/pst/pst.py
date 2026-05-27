@@ -76,7 +76,7 @@ def error_handling(response_data: ResponseData, pst_options: PSTOptions):
 def StormSim_PST(
     response_data_dict: dict,
     pst_options_dict: dict,
-    # plot_options_dict: dict,
+    output_path: str | Path = "data/outputs/pst",
     test_ecdf_data: None | dict = None,
 ):
     """ """
@@ -168,7 +168,8 @@ def StormSim_PST(
 
     # Step 5: Save results
 
-    dpath = Path()
+    dpath = Path(output_path)
+    dpath.mkdir(parents=True, exist_ok=True)
 
     fname = "selection.json"
     with open(dpath / fname, "w") as fh:

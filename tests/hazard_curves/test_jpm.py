@@ -2,7 +2,7 @@ from pathlib import Path
 
 from tools import compare1d
 
-from hazard_curves import jpm
+from stormsim.hazard_curves import jpm
 
 # Options, compute from hazard_curves import StormSim_JPM
 
