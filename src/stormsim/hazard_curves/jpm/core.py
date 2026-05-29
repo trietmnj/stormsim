@@ -8,7 +8,7 @@ from typing import Annotated, Optional
 
 import numpy as np
 from numpy.typing import NDArray
-from pydantic import Field, NonNegativeFloat, PositiveFloat
+from pydantic import ConfigDict, Field, NonNegativeFloat, PositiveFloat
 from pydantic.dataclasses import dataclass
 from scipy.stats import norm
 
@@ -38,22 +38,29 @@ class TideEnum(CaseInsensitiveEnum):
 PercentileFloat = Annotated[float, Field(ge=0, le=100)]
 
 
+@dataclass(config=ConfigDict(arbitrary_types_allowed=True, extra="ignore"))
+class InputData:
+    """
+    Input dataset passed into the JPM pipeline.
+
+    data columns: [timestamp, response (no tides), skew_tides, DSW]
+    """
+    data: NDArray
+    flag_value: Optional[list[float]] = None  # sentinel values to exclude before fitting
+    slc: NonNegativeFloat = 0.0               # sea level change implicit in surge (metres)
+
+
 @dataclass
 class Options:
     """
     Algorithmic options controlling the JPM fitting pipeline.
 
-    Mirrors the jpm_options and response_data fields from jpm_call_example.m.
     __post_init__ enforces cross-field constraints and applies ITCS uncertainty
     partitioning in-place (ua and ur are modified to hold their residual values
     after subtracting the first-partition share p1_a / p1_r).
-
-    data columns expected: [timestamp, response (no tides), skew_tides, DSW]
     """
-    flag_value: Optional[list[float]] = None   # sentinel values to exclude before fitting
     ua: Optional[PositiveFloat] = None         # absolute model error (same units as response)
     ur: Optional[PositiveFloat] = None         # relative model error (dimensionless fraction)
-    slc: NonNegativeFloat = 0.0                # sea level change implicit in surge (metres)
     tide_std: Optional[NonNegativeFloat] = None  # tide uncertainty standard deviation
     percentiles: list[PercentileFloat] = Field(
         default=[2.28, 15.87, 84.13, 97.72], min_length=1, max_length=4

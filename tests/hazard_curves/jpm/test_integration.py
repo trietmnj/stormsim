@@ -2,16 +2,23 @@ import numpy as np
 import pandas as pd
 
 from stormsim.hazard_curves.jpm.compute import compute
-from stormsim.hazard_curves.jpm.core import Options
+from stormsim.hazard_curves.jpm.core import InputData, Options
 from stormsim.hazard_curves.jpm.engine import integrate, interpolate_results, preprocess
 
 _DATA_DIR = "data/hazard_curves/jpm"
 
 
+def _input_data(**overrides):
+    """InputData matching jpm_call_example.m defaults."""
+    base = dict(flag_value=[])
+    base.update(overrides)
+    data = pd.read_parquet(f"{_DATA_DIR}/01_jpm_input.parquet").values
+    return InputData(data=data, **base)
+
+
 def _opts(**overrides):
     """Options matching jpm_call_example.m: ITCS, combined uncertainty, no tides."""
     base = dict(
-        flag_value=[],
         ua=0.3738,
         ur=0.5840,
         integration_mode="ITCS",
@@ -26,8 +33,7 @@ def _opts(**overrides):
 
 
 def test_preprocess_against_matlab():
-    data = pd.read_parquet(f"{_DATA_DIR}/01_jpm_input.parquet").values
-    resp, prob_mass = preprocess(data, _opts())
+    resp, prob_mass = preprocess(_input_data(), _opts())
 
     ref = pd.read_parquet(f"{_DATA_DIR}/02_jpm_preprocessed.parquet").values
     assert np.allclose(resp, ref[:, 0], atol=1e-6, equal_nan=True)
@@ -62,8 +68,7 @@ def test_interpolate_results_table_against_matlab():
 
 
 def test_compute_pipeline_against_matlab():
-    data = pd.read_parquet(f"{_DATA_DIR}/01_jpm_input.parquet").values
-    results = compute(data, _opts())
+    results = compute(_input_data(), _opts())
 
     out = dict(results)
     ref_plt = pd.read_parquet(f"{_DATA_DIR}/04_jpm_hc_plt.parquet").values

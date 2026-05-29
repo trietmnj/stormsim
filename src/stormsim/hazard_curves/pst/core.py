@@ -31,10 +31,10 @@ class PSTOptions:
 
     t_lag: float | None = None  # inter-event time lag (hours); Timeseries only
     gpd_criterion: int = Field(default=1, ge=1, le=2)  # 1 = sample-intensity (λ), 2 = min-WMSE
-    apply_skew: int = Field(default=0, ge=0, le=1)  # 1 = add GPR-predicted skew tides to surge
-    use_aep: int = Field(default=0, ge=0, le=1)  # 1 = express frequencies as AEP, 0 = AEF
+    apply_skew: bool = False   # add GPR-predicted skew tides to surge
+    use_aep: bool = False      # express frequencies as AEP instead of AEF
     percentiles: list[float] | None = None  # confidence-limit percentages, max 4 values
-    apply_gpd: int = Field(default=0, ge=0, le=1)  # 1 = force GPD fit regardless of sample size
+    apply_gpd: bool = False    # force GPD fit regardless of sample size
     bootstrap_sims: int = Field(default=100, gt=0)  # number of bootstrap resampling iterations
 
     @field_validator("percentiles")

@@ -11,9 +11,8 @@ def test_run_jpm_writes_outputs(hazard_curves_input, test_output_dir):
             "local_directory": str(test_output_dir.parent),
             "filename": test_output_dir.name,
         },
-        "jpm_params": {},
+        "jpm_params": {"flag_value": []},
         "jpm_options": {
-            "flag_value": [],
             "ua": 0.3738,
             "ur": 0.5840,
             "integration_mode": "ITCS",

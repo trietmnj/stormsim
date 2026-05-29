@@ -10,7 +10,7 @@ import pandas as pd
 
 from ...utilities.storage import StorageContext
 from .compute import compute
-from .core import Options
+from .core import InputData, Options
 from .plot import PlotOptions
 
 
@@ -36,23 +36,32 @@ def run_jpm(
     Standard entry point for JPM hazard curve fitting.
     Loads input via StorageContext, runs compute, writes outputs.
 
+    Config keys:
+      inputs.data_file      — path to N×4 parquet [timestamp, response, skew_tides, DSW]
+      outputs               — StorageContext output config
+      jpm_params            — InputData fields: flag_value, slc
+      jpm_options           — Options fields: ua, ur, tide_std, integration_mode, etc.
+
     Output files written to the configured output directory:
       hc_plot.parquet   — hazard curve on log-spaced AEF/AEP plot grid (~631 pts);
                           columns: AEF/AEP, Best, [percentiles]
       hc_table.parquet  — hazard curve on discrete return-period table grid (22 pts);
                           same columns; written only when return_table=True
-
-    See compute() for full pipeline details.
     """
     ctx = storage_context or StorageContext(config, is_lambda=is_lambda)
 
     input_path = ctx.get_input_path("data_file")
     data = pd.read_parquet(input_path).values
 
-    jpm_options = {**config.get("jpm_params", {}), **config.get("jpm_options", {})}
-    opts = Options(**jpm_options)
+    jpm_params = config.get("jpm_params", {})
+    input_data = InputData(
+        data=data,
+        flag_value=jpm_params.get("flag_value"),
+        slc=jpm_params.get("slc", 0.0),
+    )
+    opts = Options(**config.get("jpm_options", {}))
 
-    results = compute(data, opts)
+    results = compute(input_data, opts)
 
     out_dir = Path(ctx.get_output_path())
     _write_outputs(results, opts, out_dir)

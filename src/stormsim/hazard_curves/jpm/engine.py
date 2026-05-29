@@ -9,7 +9,7 @@ from numpy.typing import NDArray
 from scipy.interpolate import interp1d
 
 from ..common import get_plot_x_values, get_table_x_values
-from .core import IntegrationEnum, Options
+from .core import InputData, IntegrationEnum, Options
 
 
 def integrate(
@@ -83,7 +83,7 @@ def interpolate_results(
     return [(name, np.column_stack([grid_x, grid_y])) for name, grid_x, grid_y in args]
 
 
-def preprocess(data: NDArray, opts: Options) -> tuple[NDArray, NDArray]:
+def preprocess(input_data: InputData, opts: Options) -> tuple[NDArray, NDArray]:
     """
     Validate, filter, and tile the input dataset before integration (StormSim_JPM_integration.m).
 
@@ -98,15 +98,16 @@ def preprocess(data: NDArray, opts: Options) -> tuple[NDArray, NDArray]:
         resp       (M,)  preprocessed response (M = N × 444 for ITCS, M = N for ATCS)
         prob_mass  (M,)  corresponding discrete storm weights
     """
-    # Removing flag values
-    if opts.flag_value is not None:
+    data = input_data.data.copy()
 
-        mask = np.isin(data[:, 1], opts.flag_value, invert=True)
+    # Removing flag values
+    if input_data.flag_value is not None:
+        mask = np.isin(data[:, 1], input_data.flag_value, invert=True)
         data = data[mask, :]
 
         if data.size == 0:
             raise RuntimeError(
-                f"Flag value removal (flag_value={opts.flag_value}) resulted in an empty dataset. "
+                f"Flag value removal (flag_value={input_data.flag_value}) resulted in an empty dataset. "
                 "Ensure flag_value matches the data values."
             )
 
@@ -132,7 +133,7 @@ def preprocess(data: NDArray, opts: Options) -> tuple[NDArray, NDArray]:
         u_tide[:] = opts.tide_std
 
     # Removing SLC before corrections
-    resp = resp - opts.slc
+    resp = resp - input_data.slc
 
     # Apply uncertainty correction for ITCS
     if opts.integration_mode == IntegrationEnum.ITCS:
@@ -149,7 +150,7 @@ def preprocess(data: NDArray, opts: Options) -> tuple[NDArray, NDArray]:
         resp = resp + random_norm * (opts._p1_a + resp * opts._p1_r) / 2.0
 
     # Reapply tide correction
-    resp = resp + random_norm * u_tide + opts.slc
+    resp = resp + random_norm * u_tide + input_data.slc
 
     mask = np.isfinite(resp) & (resp > 0)
     resp = resp[mask]
@@ -157,7 +158,7 @@ def preprocess(data: NDArray, opts: Options) -> tuple[NDArray, NDArray]:
     if resp.size == 0:
         raise RuntimeError(
             "Integration preprocessing resulted in an empty dataset after tide/SLC correction. "
-            f"Check SLC parameter (slc={opts.slc}) and tide parameters."
+            f"Check SLC parameter (slc={input_data.slc}) and tide parameters."
         )
 
     return resp, prob_mass

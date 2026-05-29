@@ -1,7 +1,8 @@
 import re
-import pandas as pd
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
+
+import pandas as pd
 
 
 def _sanitize_header(name: str) -> str:
@@ -83,3 +84,25 @@ def aggregate_q(transect_sim_path: str) -> None:
         out_name = f"q_aggregate_loc_{reach_id}_lc_{lc_id}.parquet"
         out_df.to_parquet(output_dir / out_name)
         print(f"  Saved: {out_name} (included {len(q_cols)} transects)")
+
+
+def run_aggregate_q(
+    config: Dict[str, Any],
+    is_lambda: bool = False,
+    storage_context: Optional[Any] = None,
+) -> Dict[str, Any]:
+    """
+    Standard entry point for overtopping aggregation.
+
+    Config keys:
+      inputs.transect_sim_path — directory containing per-transect eurotop output subfolders
+
+    Output is written to <transect_sim_path>/aggregate_responses/.
+    """
+    from ..utilities.storage import StorageContext
+
+    ctx = storage_context or StorageContext(config, is_lambda=is_lambda)
+    transect_sim_path = ctx.get_input_path("transect_sim_path")
+    aggregate_q(transect_sim_path)
+    output_dir = Path(transect_sim_path) / "aggregate_responses"
+    return {"status": "success", "output": str(output_dir)}

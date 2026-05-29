@@ -6,11 +6,11 @@ Authors: N.C. Nadal-Caraballo, E. Ramos-Santiago (ERDC-CHL Coastal Hazards Group
 
 from numpy.typing import NDArray
 
-from .core import Options
+from .core import InputData, Options
 from .engine import integrate, interpolate_results, preprocess
 
 
-def compute(data: NDArray, opts: Options) -> list[tuple[str, NDArray]]:
+def compute(input_data: InputData, opts: Options) -> list[tuple[str, NDArray]]:
     """
     Pure JPM pipeline: preprocessing → integration → interpolation.
 
@@ -23,14 +23,15 @@ def compute(data: NDArray, opts: Options) -> list[tuple[str, NDArray]]:
       4. Interpolate onto standard log-spaced plot grid and discrete table grid.
 
     Parameters:
-        data:  N × 4 array with columns [timestamp, response, skew_tides, DSW]
-        opts:  validated Options instance
+        input_data:  InputData wrapping the N × 4 array [timestamp, response, skew_tides, DSW]
+                     plus optional flag_value and slc
+        opts:        validated Options instance
 
     Returns:
         List of (name, array) pairs:
           "plot"   — shape (n_plt, 1 + n_prc), columns [AEF/AEP, Best, prc...]
           "table"  — shape (n_tbl, 1 + n_prc), same columns; only when return_table=True
     """
-    resp, prob_mass = preprocess(data, opts)
+    resp, prob_mass = preprocess(input_data, opts)
     x, y = integrate(resp, prob_mass, opts)
     return interpolate_results(x, y, opts)

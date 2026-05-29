@@ -48,10 +48,11 @@ lcgen (lifecycle generation)
   eurotop.aggregate_q (aggregate overtopping across transects)
 ```
 
-A parallel module handles extreme-value statistics from simulation outputs:
+Parallel modules handle downstream analysis:
 
 ```
-hazard_curves (JPM / PST-POT analysis)
+hazard_curves (JPM / PST-POT extreme-value statistics)
+stage_volume  (DEM-based stage-volume relationships)
 ```
 
 ## Package Structure
@@ -74,15 +75,22 @@ src/stormsim/
 │   ├── runup_and_ot_eurotop_2018.py
 │   └── aggregation.py      # aggregate_q — sum overtopping across transects
 ├── hazard_curves/
-│   ├── common.py           # Shared utilities, grid values, parquet I/O
+│   ├── common.py           # Shared utilities, AEF/AEP grid values
 │   ├── jpm/                # Joint Probability Method
-│   │   ├── core.py         # Options dataclass (pydantic), enums
-│   │   └── jpm.py          # compute() — preprocessing, integration, interpolation
+│   │   ├── core.py         # Options (pydantic), IntegrationEnum/UncertaintyEnum/TideEnum
+│   │   ├── compute.py      # compute() — pure pipeline (no I/O)
+│   │   ├── engine.py       # Integration and interpolation internals
+│   │   ├── simulation.py   # run_jpm() — config-driven entry point with I/O
+│   │   └── plot.py         # PlotOptions
 │   └── pst/                # Peaks-over-Threshold (PST/POT)
-│       ├── core.py         # PSTOptions / ResponseData dataclasses
-│       ├── fit.py          # StormSim_PST_Fit — main PST fitting logic
-│       ├── mrl.py          # StormSim_MRL — mean residual life threshold selection
-│       └── pst.py          # StormSim_PST — top-level PST entry point
+│       ├── core.py         # ResponseData, PSTOptions (pydantic)
+│       ├── cleaner.py      # POT sample cleaning (flag removal, deduplication)
+│       ├── fit.py          # fit_hazard_curve — bootstrap ECDF + GPD tail
+│       ├── mrl.py          # fit_mrl — mean residual life threshold selection
+│       ├── compute.py      # compute() — pure pipeline (no I/O)
+│       └── simulation.py   # run_pst() — config-driven entry point with I/O
+├── stage_volume/           # DEM-based stage-volume relationships
+│   └── processing.py       # StageVolumeConfig, StageVolumeCalculator, run_stage_volume
 ├── sea_level_rise/         # SLR scenario generation and trend analysis
 ├── noaa_py/                # NOAA tidal gauge data access
 └── utilities/
@@ -98,7 +106,7 @@ are in `config-files/` and `data/lcgen/`.
 ### StorageContext
 
 `StorageContext` (`utilities/storage.py`) transparently resolves local vs. S3
-paths for all three pipeline stages. In Lambda, IAM role credentials are used
+paths for all pipeline stages. In Lambda, IAM role credentials are used
 automatically — never pass `access_key`/`secret_key` explicitly:
 
 ```python
@@ -112,21 +120,118 @@ opts        = ctx.get_pandas_storage_options()     # None for local
 
 For SAM local testing with local files, set `LCGEN_USE_LOCAL_INPUTS=true`.
 
-### High-Level Entry Points
+### Entry Point Pattern
 
-Each stage exposes a single callable exported from its `__init__.py`:
+Every module exposes two levels:
+
+- **`run_*(config, is_lambda, storage_context)`** — config-driven, handles all
+  file I/O via StorageContext, returns a status dict.
+- **`compute(data, opts)`** — pure function, no I/O; takes arrays/dataclasses,
+  returns arrays. Use this for embedding in larger pipelines.
+
+### Pipeline Entry Points
 
 ```python
 from stormsim.lcgen import run_lc_generator
-from stormsim.eurotop import run_eurotop, aggregate_q
-from stormsim.hazard_curves import jpm, pst
+from stormsim.hydrograph_manipulator import run_hydro_manipulator
+from stormsim.eurotop import run_eurotop, run_aggregate_q
+from stormsim.stage_volume import run_stage_volume
 
-result = run_lc_generator(config)
-result = run_eurotop(config)
-aggregate_q("data/outputs/eurotop")          # writes to .../aggregate_responses/
+run_lc_generator(config)
+run_hydro_manipulator(config)
+run_eurotop(config)
+run_aggregate_q(config)   # config keys: inputs.transect_sim_path
+run_stage_volume(config)
+```
 
-jpm.compute(fpath, key, jpm.Options(...))
-pst.compute(pst.ResponseData(...), pst.Options(...))
+All `run_*` functions share the same signature:
+```python
+run_*(config: dict, is_lambda: bool = False, storage_context: StorageContext | None = None)
+# returns: {"status": "success", "output": "<output path>"}
+```
+
+### Hazard Curves — JPM
+
+```python
+from stormsim.hazard_curves import jpm
+# or: from stormsim.hazard_curves.jpm import run_jpm, compute, InputData, Options
+
+# Config-driven (reads parquet, writes hc_plot.parquet + hc_table.parquet)
+jpm.run_jpm(config)
+# config keys: inputs.data_file, outputs,
+#              jpm_params: {flag_value, slc}
+#              jpm_options: {ua, ur, tide_std, integration_mode, uncertainty_mode,
+#                            tide_mode, percentiles, use_aep, return_table}
+
+# Pure compute
+input_data = jpm.InputData(
+    data=arr,            # N×4: [timestamp, response, skew_tides, DSW]
+    flag_value=[],       # sentinel values to exclude
+    slc=0.0,             # sea level change (metres)
+)
+opts = jpm.Options(
+    ua=0.37, ur=0.58,
+    integration_mode="ITCS",     # int, "ITCS"/"ATCS", or IntegrationEnum
+    uncertainty_mode="combined",  # int, string, or UncertaintyEnum
+    tide_mode="none",             # int, string, or TideEnum
+    percentiles=[16, 84],
+    use_aep=False,
+    return_table=True,
+)
+results = jpm.compute(input_data, opts)
+# returns: [("plot", array (n_plt, 1+n_prc)), ("table", array (n_tbl, 1+n_prc))]
+```
+
+### Hazard Curves — PST
+
+```python
+from stormsim.hazard_curves import pst
+# or: from stormsim.hazard_curves.pst import run_pst, compute, ResponseData, PSTOptions
+
+# Config-driven (reads parquet, writes hc_plot.parquet, hc_emp.parquet,
+#               gpd_params.parquet, mrl_selection.json, mrl_summary.parquet)
+pst.run_pst(config)
+# config keys: inputs.data_file, outputs,
+#              pst_params: {flag_value, n_years, slc, data_type, gpr_mdl}
+#              pst_options: {gpd_criterion, percentiles, apply_gpd, bootstrap_sims, use_aep}
+
+# Pure compute — data is N×3 array: [timestamp, response_no_tides, response_with_tides]
+response = pst.ResponseData(
+    data=arr,
+    data_type="POT",     # "POT" or "Timeseries"
+    n_years=75.0,        # POT: supply explicitly; Timeseries: inferred from timestamps
+    flag_value=[],
+    slc=0.0,
+)
+opts = pst.PSTOptions(
+    gpd_criterion=1,     # 1=sample-intensity (λ), 2=min-WMSE
+    percentiles=[16, 84],
+    apply_gpd=False,
+    bootstrap_sims=100,
+    use_aep=False,
+)
+hc_output, mrl_output = pst.compute(response, opts)
+```
+
+`PSTOptions` boolean fields (`apply_skew`, `apply_gpd`, `use_aep`) accept `bool`;
+pydantic coerces `0`/`1` for backward compatibility.
+
+### Stage-Volume
+
+```python
+from stormsim.stage_volume import run_stage_volume, StageVolumeCalculator, StageVolumeConfig
+
+# Config-driven (reads DEM + model area GeoPackage, writes stage_volume.parquet)
+run_stage_volume(config)
+# config keys: inputs.dem_file, inputs.model_area_file, outputs,
+#              stage_volume_params.{stage_units, dem_vertical_units, start, stop, n, volume_to_stage}
+
+# Pure compute
+config = StageVolumeConfig(stage_units="feet", dem_vertical_units="meters")
+calc = StageVolumeCalculator(dem_data, nodata, cell_area_m2, config)
+pairs = calc.get_relationship(start=0.0, stop=10.0, n=100)
+# returns list of {"stage": float, "volume": float}
+# set volume_to_stage=True to invert (target volume → stage)
 ```
 
 ### DuckDB for Data Loading
@@ -135,50 +240,36 @@ pst.compute(pst.ResponseData(...), pst.Options(...))
 between local CSV/parquet files and S3 objects. Enable via
 `config["inputs"]["use_duckdb"] = True`.
 
-### Hazard Curves (JPM / PST)
-
-Both modules follow the same pattern — `<module>.compute(data, opts)` where
-`opts` is a typed dataclass containing `output_path`:
-
-```python
-from stormsim.hazard_curves import jpm, pst
-
-# JPM — reads from a parquet file
-opts = jpm.Options(ua=0.37, ur=0.58, integration_mode="ITCS",
-                   output_path="data/outputs/jpm")
-jpm.compute("path/to/input.parquet", "response", opts)
-
-# PST — takes pre-extracted POT samples as a numpy array
-response = pst.ResponseData(data=arr, DataType="POT", Nyrs=75, SLC=0,
-                             flag_value=[], gprMdl=[])
-opts = pst.Options(prc=[16, 84], GPD_TH_crit=2, apply_GPD_to_SS=1,
-                   output_path="data/outputs/pst")
-sst_out, mrl_out = pst.compute(response, opts)
-```
-
-`jpm.Options` uses pydantic and accepts enums as int, string, or enum value.
-`pst.Options` and `pst.ResponseData` are plain dataclasses; both `compute`
-functions also accept raw dicts for backward compatibility.
-
 ## Tests
 
-Tests live in `tests/hazard_curves/`. They are script-style (no `def test_*`
-functions) — pytest runs the module-level code during collection.
+Tests live in `tests/`. They use standard pytest `def test_*` functions.
 
-**Before running `test_jpm.py` for the first time**, generate the parquet
-input files from the MATLAB source data:
+```
+tests/
+├── conftest.py                    # shared fixtures
+├── hazard_curves/
+│   ├── conftest.py
+│   ├── jpm/test_integration.py
+│   ├── pst/test_integration.py, test_components.py, test_data_cleaning.py, test_mrl_stats.py
+│   ├── test_jpm.py, test_jpm_units.py
+│   └── tools.py
+└── stage_volume/
+```
+
+**Before running JPM tests for the first time**, generate the parquet input
+files from the MATLAB source data:
 
 ```bash
 cd tests/hazard_curves && uv run --project ../.. python matlab2parquet.py
 ```
 
-`test_pst.py` requires `tables` (PyTables/HDF5), which is a dev-only dependency:
+`tests/hazard_curves/pst/` tests require `tables` (PyTables/HDF5):
 
 ```bash
 uv add --dev tables
 ```
 
-## Configuration Schema
+## Configuration Schema (lcgen)
 
 ```json
 {
@@ -205,14 +296,6 @@ uv add --dev tables
 
 Local config template: `data/lcgen/config_local.json`
 S3 config template: `data/lcgen/config_s3.json`
-
-## Lambda Deployment
-
-`lambda/lcgen/` wraps `run_lc_generator` in a Docker-based AWS Lambda.
-
-- Base image: `public.ecr.aws/lambda/python:3.12` (AL2023, GCC 11.3)
-- Lambda `requirements.txt` pins `numpy < 2.0.0` for stability
-- Use `docker-compose.yml` in `lambda/` for local Lambda testing
 
 ## Releasing New Versions
 

@@ -13,8 +13,6 @@ def validate_inputs(response_data: ResponseData, pst_options: PSTOptions):
     """Validate and normalise ResponseData and PSTOptions before fitting."""
 
     checks = [
-        (pst_options, "use_aep", [0, 1], "0 (AEF) or 1 (AEP)"),
-        (pst_options, "apply_gpd", [0, 1], "0 (empirical) or 1 (GPD fit)"),
         (pst_options, "gpd_criterion", [1, 2], "1 (lambda) or 2 (WMSE)"),
     ]
 
@@ -30,10 +28,7 @@ def validate_inputs(response_data: ResponseData, pst_options: PSTOptions):
         if response_data.slc is None:
             response_data.slc = 0
 
-        if pst_options.apply_skew not in [0, 1]:
-            raise ValueError("apply_skew must be 0 or 1")
-
-        if pst_options.apply_skew == 1 and response_data.gpr_mdl is None:
+        if pst_options.apply_skew and response_data.gpr_mdl is None:
             raise ValueError("When apply_skew=1: gpr_mdl cannot be empty")
 
     elif response_data.data_type == "Timeseries":
@@ -43,7 +38,7 @@ def validate_inputs(response_data: ResponseData, pst_options: PSTOptions):
         response_data.n_years = None
         response_data.slc = 0
         response_data.gpr_mdl = None
-        pst_options.apply_skew = 0
+        pst_options.apply_skew = False
 
         if pst_options.t_lag is None or pst_options.t_lag <= 0:
             raise ValueError("For Timeseries: t_lag must be positive")

@@ -1,5 +1,5 @@
 import argparse
-from stormsim.eurotop import aggregate_q
+from stormsim.eurotop import run_aggregate_q
 
 
 def main():
@@ -10,7 +10,7 @@ def main():
         help="Path to the directory containing transect subfolders.",
     )
     args = parser.parse_args()
-    aggregate_q(args.transect_sim_path)
+    run_aggregate_q({"inputs": {"transect_sim_path": args.transect_sim_path}})
 
 
 if __name__ == "__main__":

@@ -131,7 +131,7 @@ def fit_hazard_curve(
     """
 
     hc_table_x, hc_table_response, hc_plot_x = get_grid_values_v1(
-        pst_options.use_aep == 1
+        pst_options.use_aep
     )
 
     # Pre-allocate output fields
@@ -165,7 +165,7 @@ def fit_hazard_curve(
     # GPD fitting when conditions are met
     apply_gpd = (
         len(sorted_peaks) >= 20 and n_years >= 20
-    ) or pst_options.apply_gpd == 1
+    ) or pst_options.apply_gpd
     summary, selection = None, None
     if apply_gpd:
         try:
