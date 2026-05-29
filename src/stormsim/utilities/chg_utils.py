@@ -2,7 +2,7 @@ import numpy as np
 from numpy.typing import NDArray
 import matplotlib.pyplot as plt
 from pathlib import Path
-from typing import Sequence
+from typing import Optional, Sequence
 
 # ==========================================
 # 1. Storm Selection

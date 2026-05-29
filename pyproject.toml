@@ -41,5 +41,6 @@ include = ["stormsim*"]
 [dependency-groups]
 dev = [
     "pytest>=8.3.5",
+    "ruff>=0.15.13",
     "tables>=3.8.0",
 ]

@@ -1,274 +1,335 @@
+"""
+Hazard curve fitting for the StormSim-PST pipeline.
+Original MATLAB implementation: StormSim_PST_Fit.m, ecdf_boot.m, Monotonic_adjustment.m
+Authors: N.C. Nadal-Caraballo, E. Ramos-Santiago (ERDC-CHL Coastal Hazards Group)
+"""
+
 import numpy as np
 import pandas as pd
 import scipy.stats as scstats
 from scipy import interpolate
 
-from ..common import aef2aep, get_grid_values_v1 as get_grid_values
+from ..common import aef2aep, get_grid_values_v1
 from .core import PSTOptions
-from .mrl import StormSim_MRL
+from .mrl import fit_mrl
 
 
-def ecdf_boot(empHC, Nsim: int, test_data: None | dict = None):
+def bootstrap_ecdf(emp_hc, n_sims: int, test_data: None | dict = None):
     """
-    Bootstrap resampling of the empirical hazard curve (HC) with normal noise
-    applied to the samples based on their differences.
+    Bootstrap resampling of the empirical hazard curve (ecdf_boot.m).
+
+    Resamples POT peaks with replacement (Weibull plotting position) and applies
+    normal jitter scaled by adjacent-sample differences to smooth the empirical
+    distribution. When test_data is supplied, fixed random seeds are used for
+    reproducibility against MATLAB reference outputs.
     """
     np.random.seed()
-    Nstrm = len(empHC)
-    dlt = np.abs(np.diff(empHC))
-    dlt = np.append(dlt, dlt[-1])  # Repeat the last difference
-
-    shp = (Nsim, Nstrm)
+    n_storms = len(emp_hc)
+    diffs = np.abs(np.diff(emp_hc))
+    diffs = np.append(diffs, diffs[-1])
 
     if test_data is None:
-        indices = np.random.choice(np.arange(Nstrm), shp, replace=True)
-        rand = np.random.randn(*shp)
+        shape = (n_sims, n_storms)
+        indices = np.random.choice(np.arange(n_storms), shape, replace=True)
+        rand = np.random.randn(*shape)
     else:
-        # Using random data generated for MATLAB for testing
-        indices = test_data["indices"].astype(int)
-        rand = test_data["random"]
+        # test_data supplies flat arrays matching the reference output shape
+        indices = test_data["indices"].reshape(n_sims, n_storms).astype(int)
+        rand = test_data["random"].reshape(n_sims, n_storms)
 
-    boot = empHC[indices] + rand * dlt[indices]
+    boot = emp_hc[indices] + rand * diffs[indices]
     boot = np.fliplr(np.sort(boot, axis=1))
 
     return boot
 
 
-def Monotonic_adjustment(x_in, y_in):
+def monotonic_adjustment(x_in, y_in):
     """
-    Adjust y-values to enforce monotonicity (non-increasing) along the log-scaled x-axis.
+    Enforce non-increasing monotonicity on a hazard curve column (Monotonic_adjustment.m).
+
+    SST can produce non-monotonic curves when the MRL-selected GPD threshold is too
+    low, causing incomplete bootstrap samples and jumps in the mean curve or confidence
+    limits. Positive slopes on the log-AEF axis are corrected by extrapolating from the
+    two preceding slope values.
     """
     x_in = np.log(np.asarray(x_in).flatten())
     y_in = np.asarray(y_in).flatten()
 
-    # Select non-NaN entries
     idx3 = ~np.isnan(y_in)
     y = y_in[idx3].copy()
     x = x_in[idx3].copy()
 
-    # Compute slopes
     dx = np.diff(x)
     dy = np.diff(y)
     s = dy / dx
 
-    # Identify positive slopes
     id_pos = np.where(s > 0)[0]
 
     if len(id_pos) > 0:
         for i in id_pos:
-            # Take average of previous slopes, careful with index bounds
             start_idx = max(i - 2, 0)
             end_idx = i
             mean_slope = np.mean(s[start_idx:end_idx])
             y[i + 1] = mean_slope * dx[i] + y[i]
 
-    # Return adjusted values to original positions
     y_in[idx3] = y
     return y_in.reshape(1, -1)  # row vector like MATLAB output
 
 
-def StormSim_PST_Fit(
-    POT_no_tides,
-    POT_with_tides,
-    SLC,
-    Nyrs,
-    gprMdl,
+def fit_hazard_curve(
+    pot_no_tides,
+    _pot_with_tides,  # placeholder: tidal component not yet implemented
+    _slc,  # placeholder: sea level change not yet implemented
+    n_years,
+    _gpr_mdl,  # placeholder: GPR skew correction not yet implemented
     pst_options: PSTOptions,
-    #    plot_options: PlotOptions,
     test_ecdf_data: None | dict = None,
 ):
     """
-    Function to perform StormSim hazard curve fitting with monotonic adjustment.
+    Fit a hazard curve from a POT sample using bootstrapped ECDF and optional
+    GPD tail extension (StormSim_PST_Fit.m).
+
+    Pipeline:
+      1. Build empirical HC: Weibull plotting position with lambda (rate) correction.
+      2. Bootstrap-resample the ECDF (bootstrap_ecdf).
+      3. Select GPD threshold via MRL when N >= 20 and record >= 20 yrs,
+         or when apply_gpd=1 is forced.
+      4. Fit GPD to exceedances above threshold for each bootstrap simulation;
+         clip shape parameter to [-0.5, 0.3] per NCNC guidance.
+      5. Combine GPD tail with empirical body; interpolate onto standard AEF grid.
+      6. Compute mean and percentile curves; apply monotonic adjustment.
+      7. Interpolate onto standard response-level and AEF table grids.
+
+    Returns:
+        hc_output:
+            hc_plot          (n_grid, 1+n_prc)       — bootstrapped mean and percentile curves on
+                             the standard AEF/AEP plot grid; columns are [Mean, prc_1, ...]
+            hc_plot_x        (n_grid,)                — standard log-spaced AEF/AEP plot grid
+                             (~540 points, 10^1 down to 10^-6)
+            hc_emp           DataFrame (N, 5)         — raw empirical HC from the POT sample,
+                             one row per storm; columns: Response, Rank, CCDF, Hazard, ARI
+            hc_table         (n_tbl, 1+n_prc)        — response values interpolated onto the
+                             standard discrete return-period table grid
+            hc_table_x       (n_tbl,)                 — standard AEF/AEP table grid (discrete
+                             return periods, e.g. 1/2 to 1/1e6)
+            hc_table_aef_at_response (n_rsp, 1+n_prc) — AEF at each standard response
+                             level; inverse lookup of hc_table
+            hc_table_response (n_rsp,)                — standard response grid (0.01 to 20 m,
+                             step 0.01)
+            record_length    float                    — record length in years
+
+        mrl_output:
+            summary          DataFrame or None        — MRL statistics at each candidate
+                             threshold; columns: Threshold, MeanExcess, Weight, WMSE,
+                             GPD_Shape, GPD_Scale, Events, Rate; None if GPD not applied
+            selection        dict or None             — selected threshold; keys: Criterion,
+                             Threshold, id_Summary, Events, Rate; None if no minimum found
+            gpd_shapes       (n_sims, 1)              — fitted GPD shape parameter k, unadjusted
+            gpd_scales       (n_sims, 1)              — fitted GPD scale parameter σ
+            gpd_thresholds   (n_sims, 1)              — GPD threshold used per simulation
+            gpd_shapes_clipped (n_sims, 1)            — k clipped to [-0.5, 0.3] per NCNC guidance
     """
 
-    HC_tbl_x, HC_tbl_rsp_y, HC_plt_x = get_grid_values(pst_options.use_AEP == 1)
+    hc_table_x, hc_table_response, hc_plot_x = get_grid_values_v1(
+        pst_options.use_aep == 1
+    )
 
-    # Pre-allocate Output Fields
-    Resp_boot_plt = np.full((pst_options.bootstrap_sims, len(HC_plt_x)), np.nan)
-    pd_k_wOut = np.full((pst_options.bootstrap_sims, 1), np.nan)
-    pd_sigma = pd_k_wOut.copy()
-    pd_TH_wOut = pd_k_wOut.copy()
-    pd_k_mod = pd_k_wOut.copy()
+    # Pre-allocate output fields
+    boot_responses = np.full((pst_options.bootstrap_sims, len(hc_plot_x)), np.nan)
+    gpd_shapes = np.full((pst_options.bootstrap_sims, 1), np.nan)
+    gpd_scales = gpd_shapes.copy()
+    gpd_thresholds = gpd_shapes.copy()
+    gpd_shapes_clipped = gpd_shapes.copy()
 
-    # Develop empirical CDF (using output of POT function)
-    # Sort POT sample in descending order
-    POT_no_tides = np.sort(POT_no_tides)[::-1]
-    Nstrm_hist = len(POT_no_tides)
-    HC_emp = np.full((Nstrm_hist, 5), np.nan)
-    HC_emp[:, 0] = POT_no_tides.copy()
-    HC_emp[:, 1] = np.arange(1, Nstrm_hist + 1)
-    HC_emp[:, 2] = HC_emp[:, 1] / (Nstrm_hist + 1)
-    Lambda_hist = Nstrm_hist / Nyrs
+    # Sort POT sample in descending order for ECDF
+    pot_no_tides = np.sort(pot_no_tides)[::-1]
+    n_storms = len(pot_no_tides)
+    hc_emp = np.full((n_storms, 5), np.nan)
+    hc_emp[:, 0] = pot_no_tides.copy()
+    hc_emp[:, 1] = np.arange(1, n_storms + 1)
+    hc_emp[:, 2] = hc_emp[:, 1] / (n_storms + 1)
+    rate_hist = n_storms / n_years
 
-    HC_emp[:, 3] = HC_emp[:, 2] * Lambda_hist
-    HC_emp[:, 4] = 1.0 / HC_emp[:, 3]
+    hc_emp[:, 3] = hc_emp[:, 2] * rate_hist
+    hc_emp[:, 4] = 1.0 / hc_emp[:, 3]
 
-    ecdf_y = HC_emp[:, 0]
-    if pst_options.use_AEP:
-        HC_emp[:, 3] = aef2aep(HC_emp[:, 3])
-        HC_plt_x = aef2aep(HC_plt_x)
+    sorted_peaks = hc_emp[:, 0]
+    if pst_options.use_aep:
+        hc_emp[:, 3] = aef2aep(hc_emp[:, 3])
+        hc_plot_x = aef2aep(hc_plot_x)
 
     # Bootstrap resampling
-    boot = ecdf_boot(ecdf_y, pst_options.bootstrap_sims, test_ecdf_data)
-
-    # Remove negative values from bootstrapped data
+    boot = bootstrap_ecdf(sorted_peaks, pst_options.bootstrap_sims, test_ecdf_data)
     boot[boot < 0] = np.nan
 
-    # Perform SST with GPD fitting
-    # If conditions are met for GPD fitting, apply it
-    gpd_pass = len(ecdf_y) >= 20 and Nyrs >= 20
-    if gpd_pass:
-        summary, selection = StormSim_MRL(pst_options.GPD_TH_crit, ecdf_y, Nyrs)
+    # GPD fitting when conditions are met
+    apply_gpd = (
+        len(sorted_peaks) >= 20 and n_years >= 20
+    ) or pst_options.apply_gpd == 1
+    summary, selection = None, None
+    if apply_gpd:
+        try:
+            summary, selection = fit_mrl(
+                pst_options.gpd_criterion, sorted_peaks, n_years
+            )
+        except ValueError:
+            pass
 
         if selection is None:
-
-            raise NotImplementedError()
+            # No threshold found (small N or no WMSE local minima): use per-simulation
+            # minimum as fallback threshold, matching MATLAB's isnan(mrl_th) branch.
+            thresholds = 0.99 * np.nanmin(boot, axis=1)
+            above_th = boot > thresholds[:, None]
+            below_th = boot <= thresholds[:, None]
+            n_above = np.sum(above_th, axis=1)
         else:
+            threshold = selection["Threshold"]
+            above_th = boot > threshold
+            below_th = boot <= threshold
+            n_above = np.sum(above_th, axis=1)
+            thresholds = np.full(pst_options.bootstrap_sims, threshold)
 
-            mrl_th = selection["Threshold"]
-            idx = boot > mrl_th
-            sz = np.sum(idx, axis=1)
-            idx2 = boot <= mrl_th
-            mrl_th = np.full(pst_options.bootstrap_sims, mrl_th)
-
-        Lambda_mrl = sz / Nyrs
+        rate_mrl = n_above / n_years
         for k in range(pst_options.bootstrap_sims):
-            PEAKS_rnd = boot[k, :]
+            boot_peaks = boot[k, :]
 
-            u = PEAKS_rnd[idx[k, :]]
-            params = scstats.genpareto.fit(u - mrl_th[k], method="MLE", floc=0)
-            pd_k_wOut[k] = params[0]
-            # NOTE: Is this the same as pd.k?
-            pd_TH_wOut[k] = mrl_th[k]
-            pd_sigma[k] = params[2]
-
-            # Apply Generalized Pareto Distribution fitting here...
+            exceedances = boot_peaks[above_th[k, :]]
+            if len(exceedances) == 0:
+                continue
+            fit_result = scstats.genpareto.fit(
+                exceedances - thresholds[k], method="MLE", floc=0
+            )
+            gpd_shapes[k] = fit_result[0]
+            gpd_thresholds[k] = thresholds[k]
+            gpd_scales[k] = fit_result[2]
 
         # Correction of GPD shape parameter values. Limits determined by NCNC.
-        pd_k_mod = pd_k_wOut.copy()
-        k_min = -0.5
-        k_max = 0.3
-        pd_k_mod[pd_k_mod < k_min] = k_min
-        pd_k_mod[pd_k_mod > k_max] = k_max
+        gpd_shapes_clipped = gpd_shapes.copy()
+        shape_min = -0.5
+        shape_max = 0.3
+        gpd_shapes_clipped[gpd_shapes_clipped < shape_min] = shape_min
+        gpd_shapes_clipped[gpd_shapes_clipped > shape_max] = shape_max
 
-    # Compute HC (hazard curve) with GPD fitting or empirical only
+    # Compute hazard curve per bootstrap simulation
     for k in range(pst_options.bootstrap_sims):
+        if apply_gpd:
+            if np.isnan(gpd_shapes[k]) or rate_mrl[k] == 0:
+                continue
 
-        if gpd_pass:
-            opts = {
-                "c": pd_k_mod[k][0],
-                "loc": pd_TH_wOut[k][0],
-                "scale": pd_sigma[k][0],
+            gpd_params = {
+                "c": gpd_shapes_clipped[k][0],
+                "loc": gpd_thresholds[k][0],
+                "scale": gpd_scales[k][0],
             }
 
-            PEAKS_rnd = boot[k, :]
-            Resp_gpd = scstats.genpareto.ppf(1 - HC_plt_x / Lambda_mrl[k], **opts)
+            resp_gpd = scstats.genpareto.ppf(1 - hc_plot_x / rate_mrl[k], **gpd_params)
 
-            filt = ~np.isnan(Resp_gpd)
-            AEF_gpd = HC_plt_x[filt]
-            Resp_gpd = Resp_gpd[filt]
+            valid = ~np.isnan(resp_gpd)
+            aef_gpd = hc_plot_x[valid]
+            resp_gpd = resp_gpd[valid]
 
-            Resp_ecdf = boot[k, idx2[k, :]]
-            AEF_ecdf = HC_emp[idx2[k, :], 3]
+            resp_ecdf = boot[k, below_th[k, :]]
+            aef_ecdf = hc_emp[below_th[k, :], 3]
 
-            x_comb = np.concatenate([AEF_gpd, AEF_ecdf])
-            y_comb = np.concatenate([Resp_gpd, Resp_ecdf])
+            aef_combined = np.concatenate([aef_gpd, aef_ecdf])
+            resp_combined = np.concatenate([resp_gpd, resp_ecdf])
 
+            if len(aef_combined) == 0:
+                continue
         else:
-            x_comb = HC_emp[:, 3]
-            y_comb = boot[:, k]  # Use empirical bootstrapped values
+            resp_combined = boot[k, :]
+            aef_combined = hc_emp[:, 3]
 
-        if pst_options.use_AEP:
-            x_comb = aef2aep(x_comb)
+        if pst_options.use_aep:
+            aef_combined = aef2aep(aef_combined)
 
-        x_comb, idx = np.unique(x_comb, return_index=True, sorted=True)
-        y_comb = y_comb[idx]
+        _, uniq_idx = np.unique(aef_combined, return_index=True)
+        uniq_idx = np.sort(uniq_idx)
+        aef_combined = aef_combined[uniq_idx]
+        resp_combined = resp_combined[uniq_idx]
 
-        y_comb, idx = np.unique(y_comb, return_index=True, sorted=True)
-        x_comb = x_comb[idx]
+        _, uniq_idx = np.unique(resp_combined, return_index=True)
+        uniq_idx = np.sort(uniq_idx)
+        resp_combined = resp_combined[uniq_idx]
+        aef_combined = aef_combined[uniq_idx]
 
-        x_comb = np.flipud(x_comb)
-        y_comb = np.flipud(y_comb)
+        # np.interp requires ascending x; MATLAB's interp1 handles descending,
+        # so we sort here rather than flipud as the MATLAB code does.
+        sort_idx = np.argsort(aef_combined)
+        aef_combined = aef_combined[sort_idx]
+        resp_combined = resp_combined[sort_idx]
 
-        # NOTE: right=left=np.nan for MATLAB equivalent
-        Resp_boot_plt[k, :] = np.interp(
-            np.log(HC_plt_x),
-            np.log(x_comb),
-            y_comb,
+        boot_responses[k, :] = np.interp(
+            np.log(hc_plot_x),
+            np.log(aef_combined),
+            resp_combined,
             right=np.nan,
             left=np.nan,
         )
 
-    # Apply monotonic adjustment to the bootstrapped hazard curve
-    # for k in range(pst_options.bootstrap_sims):
-    #    Resp_boot_plt[k, :] = Monotonic_adjustment(HC_plt_x, Resp_boot_plt[k, :])
-
-    # Calculate the mean and percentiles of the hazard curves
-    Boot_mean_plt = np.mean(Resp_boot_plt, axis=0)
-    # NOTE: Set method='midpoint' for MATLAB equivalent
-    Boot_plt = np.nanpercentile(
-        Resp_boot_plt, pst_options.prc, axis=0, method="midpoint"
+    mean_hc = np.mean(boot_responses, axis=0)
+    prc_hc = np.nanpercentile(
+        boot_responses, pst_options.percentiles, axis=0, method="midpoint"
     )
 
-    HC_plt = np.vstack([Boot_mean_plt, Boot_plt]).T
+    hc_plot = np.vstack([mean_hc, prc_hc]).T
 
-    # For this application only: delete results if WL >= 1e3 meters
-    if pst_options.ind_Skew and (np.nanmax(Boot_mean_plt) >= 10**3):
+    if pst_options.apply_skew and (np.nanmax(mean_hc) >= 10**3):
         raise ValueError("Values above 10^3 found in mean hazard curve")
 
-    for kk in range(HC_plt.shape[1]):
-        HC_plt[:, kk] = Monotonic_adjustment(HC_plt_x, HC_plt[:, kk])
+    for col_idx in range(hc_plot.shape[1]):
+        hc_plot[:, col_idx] = monotonic_adjustment(hc_plot_x, hc_plot[:, col_idx])
 
-    HC_tbl_rsp_x = np.full((len(HC_tbl_rsp_y), HC_plt.shape[1]), np.nan)
-    HC_tbl_y = np.full((len(HC_tbl_x), HC_plt.shape[1]), np.nan)
+    hc_table_aef_at_response = np.full(
+        (len(hc_table_response), hc_plot.shape[1]), np.nan
+    )
+    hc_table = np.full((len(hc_table_x), hc_plot.shape[1]), np.nan)
 
-    for kk in range(HC_plt.shape[1]):
+    for col_idx in range(hc_plot.shape[1]):
+        args = np.unique(hc_plot[:, col_idx], return_index=True)
+        resp_vals, uniq_idx = (np.flipud(s) for s in args)
+        log_aef_vals = np.log(hc_plot_x[uniq_idx])
 
-        # Delete duplicates (stable)
-        args = np.unique(HC_plt[:, kk], return_index=True, sorted=True)
-        dm1, ia = (np.flipud(s) for s in args)
+        nan_mask = np.isnan(resp_vals) | np.isinf(resp_vals)
+        resp_vals = resp_vals[~nan_mask]
+        log_aef_vals = log_aef_vals[~nan_mask]
 
-        # dm1 = HC_plt[ia, kk]
-        dm2 = np.log(HC_plt_x[ia])
+        if len(resp_vals) < 2:
+            hc_table_aef_at_response[:, col_idx] = np.nan
+            hc_table[:, col_idx] = np.nan
+        else:
+            interp_fn = interpolate.interp1d(
+                resp_vals, log_aef_vals, fill_value="extrapolate"
+            )
+            hc_table_aef_at_response[:, col_idx] = np.exp(interp_fn(hc_table_response))
 
-        # Delete NaN / Inf
-        mask = np.isnan(dm1) | np.isinf(dm1)
-        dm1 = dm1[~mask]
-        dm2 = dm2[~mask]
+            interp_fn = interpolate.interp1d(
+                log_aef_vals, resp_vals, fill_value="extrapolate"
+            )
+            hc_table[:, col_idx] = interp_fn(np.log(hc_table_x))
 
-        # Interpolate
-        f = interpolate.interp1d(dm1, dm2, fill_value="extrapolate")
-        HC_tbl_rsp_x[:, kk] = np.exp(f(HC_tbl_rsp_y))
+    hc_table[hc_table < 0] = np.nan
+    hc_table_aef_at_response[hc_table_aef_at_response < 1e-4] = np.nan
 
-        f = interpolate.interp1d(dm2, dm1, fill_value="extrapolate")
-        HC_tbl_y[:, kk] = f(np.log(HC_tbl_x))
-
-    # Seems to be a dead warning check
-    # "At 0.1 AEP/AEF, best estimate HC value is greater than 1.75 times the empirical HC value. Manual verification is recommended."
-
-    HC_tbl_y[HC_tbl_y < 0] = np.nan
-    HC_tbl_rsp_x[HC_tbl_rsp_x < 1e-4] = np.nan
-
-    # Store the output parameters
     cols = ["Response", "Rank", "CCDF", "Hazard", "ARI"]
-    HC_emp = pd.DataFrame(HC_emp, columns=cols)
-    MRL_output = {
+    hc_emp = pd.DataFrame(hc_emp, columns=cols)
+    mrl_output = {
         "summary": summary,
         "selection": selection,
-        "pd_TH_wOut": pd_TH_wOut,
-        "pd_k_wOut": pd_k_wOut,
-        "pd_sigma": pd_sigma,
-        "pd_k_mod": pd_k_mod,
+        "gpd_thresholds": gpd_thresholds,
+        "gpd_shapes": gpd_shapes,
+        "gpd_scales": gpd_scales,
+        "gpd_shapes_clipped": gpd_shapes_clipped,
     }
-    SST_output = {
-        "RL": Nyrs,
-        "HC_plt": HC_plt,
-        "HC_tbl": HC_tbl_y,
-        "HC_tbl_rsp_x": HC_tbl_rsp_x,
-        "HC_emp": HC_emp,
-        "HC_tbl_rsp_y": HC_tbl_rsp_y,
-        "HC_plt_x": HC_plt_x,
-        "HC_tbl_x": HC_tbl_x,
+    hc_output = {
+        "record_length": n_years,
+        "hc_plot": hc_plot,
+        "hc_table": hc_table,
+        "hc_table_aef_at_response": hc_table_aef_at_response,
+        "hc_emp": hc_emp,
+        "hc_table_response": hc_table_response,
+        "hc_plot_x": hc_plot_x,
+        "hc_table_x": hc_table_x,
     }
 
-    return SST_output, MRL_output
+    return hc_output, mrl_output

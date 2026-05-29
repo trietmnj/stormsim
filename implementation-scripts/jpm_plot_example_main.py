@@ -27,10 +27,10 @@ def main():
         # ----------------
         # 2. Load In Peak Responses & Hazard Curves
         #---------------
-        # Read In Reduce Set HC  
-        reduced_hc =  pd.read_parquet(os.path.join(out_dir,"plot.parquet"))
-        plt_aef = reduced_hc["aep"] # 631 x 1
-        plt_be = reduced_hc["response"]
+        # Read In Reduce Set HC
+        reduced_hc =  pd.read_parquet(os.path.join(out_dir,"hc_plot.parquet"))
+        plt_aef = reduced_hc["AEF"] # 631 x 1
+        plt_be = reduced_hc["Best"]
         # Get Response/AEF Mapping
         ss_aef_map =  pd.read_parquet(os.path.join(out_dir,"tc_storms_peak_aef.parquet"))
         # Get Benchmark HC

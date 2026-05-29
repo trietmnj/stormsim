@@ -11,6 +11,7 @@ data/chs-files/regional-files/CHS-NA_nodes_metadata.csv
 # Data directories
 data/intermediate/
 data/raw/
+data/hazard_curves/
 
 # Mock-plugin seed data and SDK
 mock-plugin/cc-py-sdk/
