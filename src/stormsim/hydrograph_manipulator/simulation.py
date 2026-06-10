@@ -32,7 +32,7 @@ def extract_h5_lat_lon(h5_obj: h5py.File) -> Tuple[float, float]:
         raise ValueError("Could not find Latitude/Longitude attributes in H5 file.")
 
 def get_node_metadata(meta_path: str, lat: float, lon: float) -> Tuple[float, float, float]:
-    if not os.path.exists(meta_path):
+    if not meta_path.startswith("s3://") and not os.path.exists(meta_path):
         raise FileNotFoundError(f"Regional metadata not found: {meta_path}")
     chs_grid = pd.read_csv(meta_path)
     nearest_info = find_nearest_latlon(
