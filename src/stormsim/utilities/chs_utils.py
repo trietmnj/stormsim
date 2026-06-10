@@ -45,6 +45,17 @@ def find_nearest_latlon(target_lat, target_lon, latitudes, longitudes, max_radiu
     return nearest_lat, nearest_lon, within_radius, distance_km, min_indx
 
 def list_h5_files(folder_to_scan):
+    if str(folder_to_scan).startswith("s3://"):
+        import boto3
+        from urllib.parse import urlparse
+        parsed = urlparse(folder_to_scan)
+        prefix = parsed.path.lstrip("/").rstrip("/") + "/"
+        resp = boto3.client("s3").list_objects_v2(Bucket=parsed.netloc, Prefix=prefix)
+        return [
+            os.path.basename(obj["Key"])
+            for obj in resp.get("Contents", [])
+            if obj["Key"].endswith(".h5")
+        ]
     files = glob.glob(os.path.join(folder_to_scan, "*.h5"))
     return [os.path.basename(f) for f in files]
 

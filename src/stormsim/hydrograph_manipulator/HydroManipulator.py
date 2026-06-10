@@ -6,11 +6,13 @@ from stormsim import sea_level_rise as slr
 class HydroManipulator:
     def __init__(self, config_path=None):
         """
-        Initialize HydroManipulator with optional JSON config.
+        Initialize HydroManipulator with optional JSON config (file path or dict).
         """
         self.config = {}
 
-        if config_path:
+        if isinstance(config_path, dict):
+            self.config = config_path
+        elif config_path:
             self.load_config(config_path)
 
     def load_config(self, config_path):

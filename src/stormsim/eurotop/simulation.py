@@ -20,8 +20,17 @@ def run_eurotop(config: Dict[str, Any], is_lambda: bool = False, storage_context
     outpath = ctx.get_output_path()
 
     # Load PSE config and Stage Vol file
-    with open(pse_geometry_path, "r") as f:
-        pse_config = json.load(f)
+    if pse_geometry_path.startswith("s3://"):
+        import boto3
+        from urllib.parse import urlparse
+        parsed = urlparse(pse_geometry_path)
+        body = boto3.client("s3").get_object(
+            Bucket=parsed.netloc, Key=parsed.path.lstrip("/")
+        )["Body"].read()
+        pse_config = json.loads(body)
+    else:
+        with open(pse_geometry_path, "r") as f:
+            pse_config = json.load(f)
     s_v_file = pd.read_csv(stage_vol_file_path)
 
     # Determine files to process

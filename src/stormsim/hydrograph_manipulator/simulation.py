@@ -1,4 +1,5 @@
 import os
+import json
 import logging
 from datetime import datetime
 from typing import Tuple, Any, Optional, Dict, List
@@ -114,7 +115,7 @@ def run_hydro_manipulator(config: Dict[str, Any], is_lambda: bool = False, stora
     ctx = storage_context or StorageContext(config, is_lambda=is_lambda)
     
     # 1. Initialization
-    hm = HydroManipulator(config) # Assuming HydroManipulator can take dict or path
+    hm = HydroManipulator(config)
     
     # Use ctx to resolve all paths
     lc_path = ctx.get_input_path("lc_path")
@@ -136,6 +137,20 @@ def run_hydro_manipulator(config: Dict[str, Any], is_lambda: bool = False, stora
 
     if not adcirc_files or not wave_files:
         raise FileNotFoundError("Missing ADCIRC or Wave H5 files.")
+
+    # Download H5 files from S3 to /tmp so h5py can open them locally
+    if node_data_path.startswith("s3://"):
+        import boto3
+        from urllib.parse import urlparse
+        parsed = urlparse(node_data_path)
+        bucket = parsed.netloc
+        prefix = parsed.path.lstrip("/").rstrip("/") + "/"
+        local_node_dir = "/tmp/node_data"
+        os.makedirs(local_node_dir, exist_ok=True)
+        s3 = boto3.client("s3")
+        for fname in h5_list:
+            s3.download_file(bucket, f"{prefix}{fname}", os.path.join(local_node_dir, fname))
+        node_data_path = local_node_dir
 
     parts = adcirc_files[0].split("_")
     region = parts[0]
