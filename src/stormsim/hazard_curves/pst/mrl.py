@@ -41,7 +41,7 @@ def fit_mrl(gpd_criterion: int, peaks, n_years: float):
         mrl[i, 1] = np.mean(exceedances - sorted_peaks[i])
         # ddof=1 matches MATLAB's var()
         mrl[i, 2] = (n_peaks - i - 1) / np.nanvar(
-            exceedances - sorted_peaks[i], mean=mrl[i, 1], ddof=1
+            exceedances - sorted_peaks[i], ddof=1
         )
 
     weights = mrl[:, 2].ravel()

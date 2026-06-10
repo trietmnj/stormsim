@@ -7,7 +7,6 @@ Authors: N.C. Nadal-Caraballo, E. Ramos-Santiago (ERDC-CHL Coastal Hazards Group
 from pathlib import Path
 
 import numpy as np
-from matplotlib import pyplot as plt
 from numpy.typing import NDArray
 from pydantic import PositiveFloat, PositiveInt, StrictBool
 from pydantic.dataclasses import dataclass
@@ -33,6 +32,7 @@ class PlotOptions:
     _LINE_STYLES_ = ["--", "-.", ":", (0, (3, 1, 1, 1, 1, 1))]
 
     def plot(self, data: NDArray, opts: Options, output_path: Path | None = None) -> None:
+        from matplotlib import pyplot as plt
 
         figsize = (self.width, self.height)
         fig, ax = plt.subplots(1, 1, figsize=figsize)

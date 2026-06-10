@@ -11,7 +11,6 @@ import pandas as pd
 from ...utilities.storage import StorageContext
 from .compute import compute
 from .core import InputData, Options
-from .plot import PlotOptions
 
 
 def _write_outputs(results: list[tuple[str, Any]], opts: Options, out_dir: Path) -> None:
