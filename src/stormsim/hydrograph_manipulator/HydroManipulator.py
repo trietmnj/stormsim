@@ -67,11 +67,20 @@ class HydroManipulator:
         scenario_list = beta_table.iloc[:, -1].to_list()
 
         # Keep Requested Scenario
+        matched = False
         for ii, name in enumerate(scenario_list):
-            print(ii)
             if name.lower() == slr_scenario:
                 slr_scenarios_df = slr_scenarios_df[['year',f"scenario{ii+1}"]]
-                slr_scenarios_df.columns = ['year', slr_scenario] 
+                slr_scenarios_df.columns = ['year', slr_scenario]
+                matched = True
+
+        # without this, an unrecognized name returned every curve and the caller
+        # silently took scenario1 via .iloc[:, 1]
+        if not matched:
+            raise ValueError(
+                f"slr_projection_scenario {slr_scenario!r} is not valid for "
+                f"{slr_projection!r}; expected one of {[n.lower() for n in scenario_list]}"
+            )
 
         return beta_table, slr_scenarios_df
 

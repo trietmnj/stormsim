@@ -6,6 +6,7 @@ from typing import Tuple, Any, Optional, Dict, List
 import numpy as np
 import pandas as pd
 import h5py
+import fsspec
 
 from .HydroManipulator import HydroManipulator
 from .. import noaa_py
@@ -47,6 +48,28 @@ def get_node_metadata(meta_path: str, lat: float, lon: float) -> Tuple[float, fl
         chs_grid["Br"].to_numpy()[grd_row],
         chs_grid["depth"].to_numpy()[grd_row]
     )
+
+def select_h5_files(node_data_path: str, inputs: Dict[str, Any]) -> Tuple[str, str]:
+    """
+    Pick the single ADCIRC (water level) + wave H5 pair for this savepoint.
+
+    Explicit inputs.adcirc_file / inputs.wave_file win. Otherwise fall back to
+    sniffing CHS naming, where the water level file carries "ADCIRC" in its name.
+    """
+    adcirc_name = inputs.get("adcirc_file")
+    wave_name = inputs.get("wave_file")
+    if not (adcirc_name and wave_name):
+        h5_list = list_h5_files(node_data_path)
+        adcirc_name = adcirc_name or next((f for f in h5_list if "ADCIRC" in f), None)
+        wave_name = wave_name or next((f for f in h5_list if "ADCIRC" not in f), None)
+
+    if not adcirc_name or not wave_name:
+        raise FileNotFoundError(
+            f"Missing ADCIRC or Wave H5 files in {node_data_path!r}; "
+            "set inputs.adcirc_file and inputs.wave_file to name them explicitly."
+        )
+    return adcirc_name, wave_name
+
 
 def process_single_storm(
     hm: HydroManipulator,
@@ -112,33 +135,44 @@ def process_single_storm(
     return data
 
 def run_hydro_manipulator(config: Dict[str, Any], is_lambda: bool = False, storage_context: Optional[StorageContext] = None) -> Dict[str, Any]:
+    """
+    Run the hydrograph manipulator for a SINGLE savepoint.
+
+    Exactly one ADCIRC (water level) and one wave H5 file are read per call.
+    Supply them explicitly via inputs.adcirc_file / inputs.wave_file, or leave
+    them off to sniff CHS naming ("ADCIRC" substring) from node_data_path.
+    inputs.region overrides the region token used to locate
+    {region}_nodes_metadata.csv in chs_meta_dir.
+    """
     ctx = storage_context or StorageContext(config, is_lambda=is_lambda)
-    
+
     # 1. Initialization
     hm = HydroManipulator(config)
-    
+
     # Use ctx to resolve all paths
     lc_path = ctx.get_input_path("lc_path")
     node_data_path = ctx.get_input_path("node_data_path")
     tide_config_path = ctx.get_input_path("tide_config")
     chs_meta_dir = ctx.get_input_path("chs_meta_dir") or "data/chs-files/regional-files/"
 
+    # fsspec so this works for both local paths and s3:// (plain open() silently
+    # yielded {}, which disabled SLR/tides without any error)
     tides_config = {}
-    if os.path.exists(tide_config_path):
-        with open(tide_config_path, 'r') as f:
+    if tide_config_path:
+        with fsspec.open(tide_config_path, 'r') as f:
             tides_config = json.load(f)[0]
-    
+
+    if (hm.config.get("add_slr") or hm.config.get("add_tides")) and tides_config.get("station") is None:
+        raise ValueError("add_slr/add_tides require inputs.tide_config to supply a 'station'")
+
     lc_data = pd.read_csv(lc_path)
 
     # 2. File Identification
-    h5_list = list_h5_files(node_data_path)
-    adcirc_files = [f for f in h5_list if "ADCIRC" in f]
-    wave_files = [f for f in h5_list if "ADCIRC" not in f]
+    adcirc_name, wave_name = select_h5_files(node_data_path, ctx.inputs)
 
-    if not adcirc_files or not wave_files:
-        raise FileNotFoundError("Missing ADCIRC or Wave H5 files.")
-
-    # Download H5 files from S3 to /tmp so h5py can open them locally
+    # Download H5 files from S3 to /tmp so h5py can open them locally.
+    # Only the two files actually read -- the prefix may hold many savepoints
+    # and Lambda /tmp is 512MB (CHS files run ~25-40MB each).
     if node_data_path.startswith("s3://"):
         import boto3
         from urllib.parse import urlparse
@@ -148,15 +182,14 @@ def run_hydro_manipulator(config: Dict[str, Any], is_lambda: bool = False, stora
         local_node_dir = "/tmp/node_data"
         os.makedirs(local_node_dir, exist_ok=True)
         s3 = boto3.client("s3")
-        for fname in h5_list:
+        for fname in (adcirc_name, wave_name):
             s3.download_file(bucket, f"{prefix}{fname}", os.path.join(local_node_dir, fname))
         node_data_path = local_node_dir
 
-    parts = adcirc_files[0].split("_")
-    region = parts[0]
+    region = ctx.inputs.get("region") or adcirc_name.split("_")[0]
 
-    adcirc_path = os.path.join(node_data_path, adcirc_files[0])
-    wave_path = os.path.join(node_data_path, wave_files[0])
+    adcirc_path = os.path.join(node_data_path, adcirc_name)
+    wave_path = os.path.join(node_data_path, wave_name)
 
     with h5py.File(adcirc_path, 'r') as adcirc_h5, h5py.File(wave_path, 'r') as wave_h5:
         sp_lat, sp_lon = extract_h5_lat_lon(adcirc_h5)
@@ -183,15 +216,15 @@ def run_hydro_manipulator(config: Dict[str, Any], is_lambda: bool = False, stora
 
         slr_scenarios_df = None
         if hm.config.get("add_slr"):
-            if tides_config.get("station") is not None:
-                _, alpha = slr.linear_trend_api.get_noaa_linear_trend(int(tides_config["station"]))
-                _, slr_scenarios_df = hm.get_slr_projections(
-                    hm.config.get("slr_projection"), 
-                    hm.config.get("slr_projection_scenario"), 
-                    alpha, 
-                    lc_data['year'].min(), 
-                    lc_data['year'].max()
-                )
+            # station presence already validated above
+            _, alpha = slr.linear_trend_api.get_noaa_linear_trend(int(tides_config["station"]))
+            _, slr_scenarios_df = hm.get_slr_projections(
+                hm.config.get("slr_projection"),
+                hm.config.get("slr_projection_scenario"),
+                alpha,
+                lc_data['year'].min(),
+                lc_data['year'].max()
+            )
 
         stm_records = lc_data.to_dict(orient="records")
         for i, storm_data in enumerate(stm_records):
