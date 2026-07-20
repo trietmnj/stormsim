@@ -7,12 +7,17 @@ Covers the failure modes that previously passed silently:
   - an unrecognized SLR scenario name falling through to scenario1
 """
 import json
+from pathlib import Path
 
 import fsspec
 import pytest
 
 from stormsim.hydrograph_manipulator.HydroManipulator import HydroManipulator
-from stormsim.hydrograph_manipulator.simulation import select_h5_files, run_hydro_manipulator
+from stormsim.hydrograph_manipulator.simulation import (
+    resolve_tides_config,
+    run_hydro_manipulator,
+    select_h5_files,
+)
 
 CHS_NAMES = [
     "CHS-NA_TS_SimB1RT_Post0_SP0064_STWAVE04_Timeseries.h5",
@@ -86,6 +91,48 @@ def test_remote_tide_config_resolves(tmp_path):
         json.dump(GAUGE, f)
     with pytest.raises(FileNotFoundError):
         run_hydro_manipulator(_cfg(tmp_path, tide_config="memory://tidal_gauge.json"))
+
+
+def test_inline_tide_station_needs_no_file(tmp_path):
+    # station resolves from inputs alone -> past the guard -> absent lc_path
+    with pytest.raises(FileNotFoundError):
+        run_hydro_manipulator(_cfg(tmp_path, tide_station="8557380"))
+
+
+def test_inline_tide_station_accepts_numeric(tmp_path):
+    # chart_feat.noaa_station.stationid is numeric, so json may carry an int
+    with pytest.raises(FileNotFoundError):
+        run_hydro_manipulator(_cfg(tmp_path, tide_station=8557380))
+
+
+def test_inline_station_defaults_match_shipped_config():
+    """
+    get_tidal_prediction defaults interval to 'h' (hourly), but the shipped
+    tidal_gauge.json uses '1' (1-minute). Inline must not silently coarsen.
+    """
+    shipped = json.loads(
+        (Path(__file__).parents[2] / "config-files" / "tidal_gauge.json").read_text()
+    )[0]
+    cfg = resolve_tides_config("", {"tide_station": "8557380"})
+    assert cfg["interval"] == shipped["interval"]
+    assert cfg["datum"] == shipped["datum"]
+
+
+def test_inline_station_overrides_file_but_keeps_its_other_values(tmp_path):
+    tc = tmp_path / "tidal_gauge.json"
+    tc.write_text(json.dumps([{"station": "1111111", "datum": "NAVD", "interval": "6"}]))
+    cfg = resolve_tides_config(str(tc), {"tide_station": "8557380"})
+    assert cfg == {"station": "8557380", "datum": "NAVD", "interval": "6"}
+
+
+def test_file_alone_is_passed_through_verbatim(tmp_path):
+    tc = tmp_path / "tidal_gauge.json"
+    tc.write_text(json.dumps(GAUGE))
+    assert resolve_tides_config(str(tc), {}) == GAUGE[0]
+
+
+def test_no_station_anywhere_yields_empty():
+    assert resolve_tides_config("", {}) == {}
 
 
 @pytest.mark.parametrize("scenario", ["low", "intermediate", "high"])

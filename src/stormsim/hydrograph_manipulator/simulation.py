@@ -49,6 +49,33 @@ def get_node_metadata(meta_path: str, lat: float, lon: float) -> Tuple[float, fl
         chs_grid["depth"].to_numpy()[grd_row]
     )
 
+def resolve_tides_config(tide_config_path: str, inputs: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Assemble the NOAA gauge config from inputs.tide_station and/or a
+    inputs.tide_config json file (a single-element list).
+
+    inputs.tide_station wins, so callers holding the gauge id in a database
+    need not stage a one-field json per job. Its defaults match the shipped
+    tidal_gauge.json rather than get_tidal_prediction's own signature defaults
+    (interval 'h'), so moving to inline cannot silently coarsen tides from
+    1-minute to hourly. Read via fsspec so s3:// works -- plain open() behind
+    os.path.exists() yielded {} for any URI, which disabled SLR/tides silently.
+    """
+    tides_config = {}
+    if tide_config_path:
+        with fsspec.open(tide_config_path, 'r') as f:
+            tides_config = json.load(f)[0]
+
+    if inputs.get("tide_station") is not None:
+        tides_config = {
+            "datum": "MSL",
+            "interval": "1",
+            **tides_config,
+            "station": str(inputs["tide_station"]),
+        }
+    return tides_config
+
+
 def select_h5_files(node_data_path: str, inputs: Dict[str, Any]) -> Tuple[str, str]:
     """
     Pick the single ADCIRC (water level) + wave H5 pair for this savepoint.
@@ -143,6 +170,10 @@ def run_hydro_manipulator(config: Dict[str, Any], is_lambda: bool = False, stora
     them off to sniff CHS naming ("ADCIRC" substring) from node_data_path.
     inputs.region overrides the region token used to locate
     {region}_nodes_metadata.csv in chs_meta_dir.
+
+    The NOAA gauge for tides/SLR comes from inputs.tide_station (preferred) or
+    inputs.tide_config, a json file holding a single-element list. Either is
+    required when add_slr or add_tides is set.
     """
     ctx = storage_context or StorageContext(config, is_lambda=is_lambda)
 
@@ -155,15 +186,13 @@ def run_hydro_manipulator(config: Dict[str, Any], is_lambda: bool = False, stora
     tide_config_path = ctx.get_input_path("tide_config")
     chs_meta_dir = ctx.get_input_path("chs_meta_dir") or "data/chs-files/regional-files/"
 
-    # fsspec so this works for both local paths and s3:// (plain open() silently
-    # yielded {}, which disabled SLR/tides without any error)
-    tides_config = {}
-    if tide_config_path:
-        with fsspec.open(tide_config_path, 'r') as f:
-            tides_config = json.load(f)[0]
+    tides_config = resolve_tides_config(tide_config_path, ctx.inputs)
 
     if (hm.config.get("add_slr") or hm.config.get("add_tides")) and tides_config.get("station") is None:
-        raise ValueError("add_slr/add_tides require inputs.tide_config to supply a 'station'")
+        raise ValueError(
+            "add_slr/add_tides require a NOAA station: set inputs.tide_station "
+            "or point inputs.tide_config at a config supplying 'station'"
+        )
 
     lc_data = pd.read_csv(lc_path)
 
