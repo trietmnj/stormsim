@@ -106,11 +106,14 @@ def write_dicts_to_csv(dicts, filename:str):
                 writer.writerow(row)
 
 def merge_dicts(dicts):
-    # Collect all fieldnames across dictionaries
-    all_fields = set()
+    # Collect all fieldnames across dictionaries, first-seen order preserved.
+    # A set here made the output column order vary between runs (string hashing
+    # is salted per process), so two runs of the same lifecycle produced parquet
+    # files whose schemas could not be compared directly.
+    all_fields = {}
     for d in dicts:
-        all_fields.update(d.keys())
-        fieldnames = list(all_fields)
+        all_fields.update(dict.fromkeys(d.keys()))
+    fieldnames = list(all_fields)
 
     normalized = {k: [] for k in fieldnames}
 
