@@ -237,11 +237,14 @@ def run_hydro_manipulator(config: Dict[str, Any], is_lambda: bool = False, stora
             season_trend = noaa_py.seasonal_cycle.get_station_seasonal_trend(tides_config["station"])
             season_mask_indices = np.searchsorted(np.array(season_trend['month']), lc_data['month'].to_numpy())
 
-        tidal_ds = None
+        tide_cache = None
         if hm.config.get("add_tides"):
             tides_config["start_date"] = f"{lc_data['year'].min()}0101"
             tides_config["end_date"] = f"{lc_data['year'].max()}1231"
-            tidal_ds = noaa_py.tides.get_tidal_prediction(tides_config)
+            # Only the days a storm actually spans are ever read below, and
+            # storms are sparse, so fetch those windows on demand instead of
+            # every day between the first and last year of the lifecycle.
+            tide_cache = noaa_py.tides.TidalPredictionCache(tides_config)
 
         slr_scenarios_df = None
         if hm.config.get("add_slr"):
@@ -267,8 +270,9 @@ def run_hydro_manipulator(config: Dict[str, Any], is_lambda: bool = False, stora
                 if season_trend is not None:
                     trend_val = season_trend['level'][season_mask_indices[i]]
                     processed_data["water_elevation"] += trend_val
-                if tidal_ds is not None:
+                if tide_cache is not None:
                     t_start, t_end = processed_data["date"][0], processed_data["date"][-1]
+                    tidal_ds = tide_cache.get_window(t_start, t_end)
                     tide_time, tide_signal = noaa_py.data_query.filter_tide_data(tidal_ds, t_start, t_end)
                     processed_data["water_elevation"] = hm.add_tides(
                         processed_data["water_elevation"], processed_data["date"], tide_signal, tide_time

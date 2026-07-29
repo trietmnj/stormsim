@@ -75,7 +75,9 @@ class StorageContext:
 
     def get_output_path(self) -> str:
         """Resolves the output destination based on config."""
-        filename = self.outputs.get("filename", "output.csv")
+        # Every caller of this path writes parquet (see write_parquet), so the
+        # default name said .csv about a file that was never CSV.
+        filename = self.outputs.get("filename", "output.parquet")
         if self.outputs.get("storage_type") == "s3":
             bucket = self.outputs["s3_bucket"]
             prefix = self.outputs.get("s3_prefix", "").strip("/")
