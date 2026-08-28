@@ -63,6 +63,13 @@ def run_eurotop(config: Dict[str, Any], is_lambda: bool = False, storage_context
             process_lc_file(lc_file, config, pse_xsec, s_v_file, transect_outpath)
 
     # Aggregate all completed transect responses into per-location/lifecycle files.
-    aggregate_q(outpath)
+    # aggregate_q raises AggregationError when nothing could be aggregated at all
+    # (bad path, or no readable response files); that propagates out of run_eurotop.
+    aggregation_result = aggregate_q(outpath)
 
-    return {"status": "success", "output": outpath}
+    return {
+        "status": "success",
+        "output": outpath,
+        "pairs_written": aggregation_result["pairs_written"],
+        "output_paths": aggregation_result["output_paths"],
+    }

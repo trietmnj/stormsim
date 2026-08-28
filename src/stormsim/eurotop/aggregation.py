@@ -7,6 +7,10 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 
 
+class AggregationError(Exception):
+    """Raised when overtopping-rate aggregation cannot proceed at all."""
+
+
 def _join_storage_path(base: str, child: str) -> str:
     """Join a local path or S3 URI without corrupting the URI scheme."""
     if base.startswith("s3://"):
@@ -19,7 +23,7 @@ def _sanitize_header(name: str) -> str:
     return sanitized.strip("_")
 
 
-def aggregate_q(transect_sim_path: str) -> None:
+def aggregate_q(transect_sim_path: str) -> Dict[str, Any]:
     """
     Aggregates overtopping rates (q) across multiple transects for each reach
     and lifecycle. Writes one parquet per (reach, lc) pair to
@@ -30,15 +34,22 @@ def aggregate_q(transect_sim_path: str) -> None:
             <transect_name>/
                 responses_loc_<N>_lc_<M>.parquet   # must contain overtopping_rate
                 stage_*.parquet                      # ignored
+
+    Returns a dict describing what was actually written:
+        {"pairs_written": <int>, "output_paths": [<str>, ...]}
+
+    Raises AggregationError when aggregation cannot proceed at all:
+        - transect_sim_path is not a directory
+        - no readable response files were found under it
     """
     if transect_sim_path.startswith("s3://"):
-        _aggregate_q_s3(transect_sim_path)
-        return
+        return _aggregate_q_s3(transect_sim_path)
 
     base_path = Path(transect_sim_path)
     if not base_path.is_dir():
-        print(f"Error: {transect_sim_path} is not a directory.")
-        return
+        raise AggregationError(
+            f"Aggregation input is not a directory: {transect_sim_path}"
+        )
 
     aggregation_map: Dict[Tuple[int, int], List[Tuple[str, pd.DataFrame]]] = {}
 
@@ -58,20 +69,23 @@ def aggregate_q(transect_sim_path: str) -> None:
             try:
                 df = pd.read_parquet(file_path)
                 if "overtopping_rate" not in df.columns:
+                    print(f"Warning: Missing overtopping_rate column: {file_path}")
                     continue
                 aggregation_map.setdefault(key, []).append((transect_name, df))
             except Exception as e:
                 print(f"Warning: Failed to read {file_path}: {e}")
 
     if not aggregation_map:
-        print("No matching response files found for aggregation.")
-        return
+        raise AggregationError(
+            f"No readable response files found under {transect_sim_path}"
+        )
 
     output_dir = base_path / "aggregate_responses"
     output_dir.mkdir(parents=True, exist_ok=True)
     print(f"Aggregating data for {len(aggregation_map)} unique (reach, lc) pairs...")
 
     _response_cols = {"overtopping_rate", "runup", "overtopping_volume", "stage"}
+    output_paths: List[str] = []
 
     for (reach_id, lc_id), data_list in aggregation_map.items():
         _, first_df = data_list[0]
@@ -91,15 +105,26 @@ def aggregate_q(transect_sim_path: str) -> None:
             q_cols.append(col)
 
         if not q_cols:
+            print(
+                f"Warning: No compatible transect responses for reach {reach_id}, "
+                f"LC {lc_id}. Skipping."
+            )
             continue
 
         out_df["q_total"] = out_df[q_cols].sum(axis=1)
         out_name = f"q_aggregate_loc_{reach_id}_lc_{lc_id}.parquet"
-        out_df.to_parquet(output_dir / out_name)
+        out_path = output_dir / out_name
+        out_df.to_parquet(out_path)
+        output_paths.append(str(out_path))
         print(f"  Saved: {out_name} (included {len(q_cols)} transects)")
 
+    return {
+        "pairs_written": len(output_paths),
+        "output_paths": output_paths,
+    }
 
-def _aggregate_q_s3(transect_sim_path: str) -> None:
+
+def _aggregate_q_s3(transect_sim_path: str) -> Dict[str, Any]:
     """Aggregate transect response parquet files stored under an S3 prefix."""
     from urllib.parse import urlparse
 
@@ -130,6 +155,7 @@ def _aggregate_q_s3(transect_sim_path: str) -> None:
             try:
                 df = pd.read_parquet(file_path)
                 if "overtopping_rate" not in df.columns:
+                    print(f"Warning: Missing overtopping_rate column: {file_path}")
                     continue
                 key_pair = (int(match.group(1)), int(match.group(2)))
                 aggregation_map.setdefault(key_pair, []).append((parts[0], df))
@@ -137,12 +163,14 @@ def _aggregate_q_s3(transect_sim_path: str) -> None:
                 print(f"Warning: Failed to read {file_path}: {e}")
 
     if not aggregation_map:
-        print("No matching response files found for aggregation.")
-        return
+        raise AggregationError(
+            f"No readable response files found under {transect_sim_path}"
+        )
 
     output_prefix = _join_storage_path(transect_sim_path, "aggregate_responses")
     print(f"Aggregating data for {len(aggregation_map)} unique (reach, lc) pairs...")
     response_cols = {"overtopping_rate", "runup", "overtopping_volume", "stage"}
+    output_paths: List[str] = []
 
     for (reach_id, lc_id), data_list in aggregation_map.items():
         _, first_df = data_list[0]
@@ -162,12 +190,23 @@ def _aggregate_q_s3(transect_sim_path: str) -> None:
             q_cols.append(col)
 
         if not q_cols:
+            print(
+                f"Warning: No compatible transect responses for reach {reach_id}, "
+                f"LC {lc_id}. Skipping."
+            )
             continue
 
         out_df["q_total"] = out_df[q_cols].sum(axis=1)
         out_name = f"q_aggregate_loc_{reach_id}_lc_{lc_id}.parquet"
-        out_df.to_parquet(_join_storage_path(output_prefix, out_name), index=False)
+        output_path = _join_storage_path(output_prefix, out_name)
+        out_df.to_parquet(output_path, index=False)
+        output_paths.append(output_path)
         print(f"  Saved: {out_name} (included {len(q_cols)} transects)")
+
+    return {
+        "pairs_written": len(output_paths),
+        "output_paths": output_paths,
+    }
 
 
 def run_aggregate_q(
@@ -187,6 +226,11 @@ def run_aggregate_q(
 
     ctx = storage_context or StorageContext(config, is_lambda=is_lambda)
     transect_sim_path = ctx.get_input_path("transect_sim_path")
-    aggregate_q(transect_sim_path)
+    aggregation_result = aggregate_q(transect_sim_path)
     output_dir = _join_storage_path(transect_sim_path, "aggregate_responses")
-    return {"status": "success", "output": output_dir}
+    return {
+        "status": "success",
+        "output": output_dir,
+        "pairs_written": aggregation_result["pairs_written"],
+        "output_paths": aggregation_result["output_paths"],
+    }
