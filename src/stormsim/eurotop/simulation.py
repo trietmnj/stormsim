@@ -5,6 +5,7 @@ import warnings
 from typing import Dict, Any, Optional, List
 
 from .processing import process_lc_file
+from .aggregation import aggregate_q
 from ..utilities.storage import StorageContext
 
 def run_eurotop(config: Dict[str, Any], is_lambda: bool = False, storage_context: Optional[StorageContext] = None) -> Dict[str, Any]:
@@ -60,5 +61,8 @@ def run_eurotop(config: Dict[str, Any], is_lambda: bool = False, storage_context
             # process_lc_file might need storage_options for S3 - 
             # for now passing the raw path which pandas can handle if s3://
             process_lc_file(lc_file, config, pse_xsec, s_v_file, transect_outpath)
+
+    # Aggregate all completed transect responses into per-location/lifecycle files.
+    aggregate_q(outpath)
 
     return {"status": "success", "output": outpath}
