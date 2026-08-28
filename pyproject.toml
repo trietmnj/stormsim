@@ -17,7 +17,7 @@ dependencies = [
     "tqdm",
     "duckdb",
     "boto3",
-    "s3fs",
+    "s3fs>=2023.6.0",
     "python-dotenv",
     "pyarrow",
     "pydantic>=2.10.6",
