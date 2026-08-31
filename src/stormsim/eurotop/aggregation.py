@@ -25,14 +25,15 @@ def _sanitize_header(name: str) -> str:
 
 def aggregate_q(transect_sim_path: str) -> Dict[str, Any]:
     """
-    Aggregates overtopping rates (q) across multiple transects for each reach
-    and lifecycle. Writes one parquet per (reach, lc) pair to
+    Aggregates overtopping rates (q) across multiple transects for each location
+    and lifecycle. Writes one parquet per (location, lc) pair to
     <transect_sim_path>/aggregate_responses/.
 
     Input directory layout:
         <transect_sim_path>/
             <transect_name>/
-                responses_loc_<N>_lc_<M>.parquet   # must contain overtopping_rate
+                <lifecycle_filename>_responses_loc_<N>_lc_<M>.parquet
+                                                    # must contain overtopping_rate
                 stage_*.parquet                      # ignored
 
     Returns a dict describing what was actually written:
@@ -82,12 +83,12 @@ def aggregate_q(transect_sim_path: str) -> Dict[str, Any]:
 
     output_dir = base_path / "aggregate_responses"
     output_dir.mkdir(parents=True, exist_ok=True)
-    print(f"Aggregating data for {len(aggregation_map)} unique (reach, lc) pairs...")
+    print(f"Aggregating data for {len(aggregation_map)} unique (location, lc) pairs...")
 
     _response_cols = {"overtopping_rate", "runup", "overtopping_volume", "stage"}
     output_paths: List[str] = []
 
-    for (reach_id, lc_id), data_list in aggregation_map.items():
+    for (location_id, lc_id), data_list in aggregation_map.items():
         _, first_df = data_list[0]
         metadata_cols = [c for c in first_df.columns if c not in _response_cols]
         out_df = first_df[metadata_cols].copy()
@@ -97,7 +98,7 @@ def aggregate_q(transect_sim_path: str) -> Dict[str, Any]:
             if len(df) != len(out_df):
                 print(
                     f"Warning: Row count mismatch for {transect_name} "
-                    f"at reach {reach_id}, LC {lc_id}. Skipping."
+                    f"at location {location_id}, LC {lc_id}. Skipping."
                 )
                 continue
             col = f"q_{_sanitize_header(transect_name)}"
@@ -106,13 +107,13 @@ def aggregate_q(transect_sim_path: str) -> Dict[str, Any]:
 
         if not q_cols:
             print(
-                f"Warning: No compatible transect responses for reach {reach_id}, "
+                f"Warning: No compatible transect responses for location {location_id}, "
                 f"LC {lc_id}. Skipping."
             )
             continue
 
         out_df["q_total"] = out_df[q_cols].sum(axis=1)
-        out_name = f"q_aggregate_loc_{reach_id}_lc_{lc_id}.parquet"
+        out_name = f"q_aggregate_loc_{location_id}_lc_{lc_id}.parquet"
         out_path = output_dir / out_name
         out_df.to_parquet(out_path)
         output_paths.append(str(out_path))
@@ -168,11 +169,11 @@ def _aggregate_q_s3(transect_sim_path: str) -> Dict[str, Any]:
         )
 
     output_prefix = _join_storage_path(transect_sim_path, "aggregate_responses")
-    print(f"Aggregating data for {len(aggregation_map)} unique (reach, lc) pairs...")
+    print(f"Aggregating data for {len(aggregation_map)} unique (location, lc) pairs...")
     response_cols = {"overtopping_rate", "runup", "overtopping_volume", "stage"}
     output_paths: List[str] = []
 
-    for (reach_id, lc_id), data_list in aggregation_map.items():
+    for (location_id, lc_id), data_list in aggregation_map.items():
         _, first_df = data_list[0]
         metadata_cols = [c for c in first_df.columns if c not in response_cols]
         out_df = first_df[metadata_cols].copy()
@@ -182,7 +183,7 @@ def _aggregate_q_s3(transect_sim_path: str) -> Dict[str, Any]:
             if len(df) != len(out_df):
                 print(
                     f"Warning: Row count mismatch for {transect_name} "
-                    f"at reach {reach_id}, LC {lc_id}. Skipping."
+                    f"at location {location_id}, LC {lc_id}. Skipping."
                 )
                 continue
             col = f"q_{_sanitize_header(transect_name)}"
@@ -191,13 +192,13 @@ def _aggregate_q_s3(transect_sim_path: str) -> Dict[str, Any]:
 
         if not q_cols:
             print(
-                f"Warning: No compatible transect responses for reach {reach_id}, "
+                f"Warning: No compatible transect responses for location {location_id}, "
                 f"LC {lc_id}. Skipping."
             )
             continue
 
         out_df["q_total"] = out_df[q_cols].sum(axis=1)
-        out_name = f"q_aggregate_loc_{reach_id}_lc_{lc_id}.parquet"
+        out_name = f"q_aggregate_loc_{location_id}_lc_{lc_id}.parquet"
         output_path = _join_storage_path(output_prefix, out_name)
         out_df.to_parquet(output_path, index=False)
         output_paths.append(output_path)
