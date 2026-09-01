@@ -42,6 +42,8 @@ def aggregate_q(transect_sim_path: str) -> Dict[str, Any]:
     Raises AggregationError when aggregation cannot proceed at all:
         - transect_sim_path is not a directory
         - no readable response files were found under it
+        - transects disagree on row count for a (location, lc) pair,
+          which indicates corrupt upstream output
     """
     if transect_sim_path.startswith("s3://"):
         return _aggregate_q_s3(transect_sim_path)
@@ -89,6 +91,9 @@ def aggregate_q(transect_sim_path: str) -> Dict[str, Any]:
     output_paths: List[str] = []
 
     for (location_id, lc_id), data_list in aggregation_map.items():
+        # Sort so the reference frame and column order do not depend on
+        # directory enumeration order.
+        data_list.sort(key=lambda item: item[0])
         _, first_df = data_list[0]
         metadata_cols = [c for c in first_df.columns if c not in _response_cols]
         out_df = first_df[metadata_cols].copy()
@@ -96,21 +101,18 @@ def aggregate_q(transect_sim_path: str) -> Dict[str, Any]:
         q_cols = []
         for transect_name, df in data_list:
             if len(df) != len(out_df):
-                print(
-                    f"Warning: Row count mismatch for {transect_name} "
-                    f"at location {location_id}, LC {lc_id}. Skipping."
+                # Responses for one (location, lc) pair come from one run
+                # and must agree; a mismatch means corrupt upstream output.
+                # Skipping would write an under-summed q_total as if it
+                # were the total.
+                raise AggregationError(
+                    f"Row count mismatch for {transect_name} at location "
+                    f"{location_id}, LC {lc_id}: {len(df)} rows vs "
+                    f"{len(out_df)} in {data_list[0][0]}"
                 )
-                continue
             col = f"q_{_sanitize_header(transect_name)}"
             out_df[col] = df["overtopping_rate"].values
             q_cols.append(col)
-
-        if not q_cols:
-            print(
-                f"Warning: No compatible transect responses for location {location_id}, "
-                f"LC {lc_id}. Skipping."
-            )
-            continue
 
         out_df["q_total"] = out_df[q_cols].sum(axis=1)
         out_name = f"q_aggregate_loc_{location_id}_lc_{lc_id}.parquet"
@@ -141,7 +143,10 @@ def _aggregate_q_s3(transect_sim_path: str) -> Dict[str, Any]:
         for obj in page.get("Contents", []):
             key = obj["Key"]
             relative_key = key[len(prefix):]
-            parts = relative_key.split("/", 1)
+            # Only depth-1 keys are transect responses. A nested key
+            # (a backup or archive copy) would re-enter under the same
+            # transect name and double-count that transect in q_total.
+            parts = relative_key.split("/")
             if len(parts) != 2 or parts[0] == "aggregate_responses":
                 continue
             filename = parts[1]
@@ -174,6 +179,9 @@ def _aggregate_q_s3(transect_sim_path: str) -> Dict[str, Any]:
     output_paths: List[str] = []
 
     for (location_id, lc_id), data_list in aggregation_map.items():
+        # Sort so the reference frame and column order do not depend on
+        # listing order.
+        data_list.sort(key=lambda item: item[0])
         _, first_df = data_list[0]
         metadata_cols = [c for c in first_df.columns if c not in response_cols]
         out_df = first_df[metadata_cols].copy()
@@ -181,21 +189,16 @@ def _aggregate_q_s3(transect_sim_path: str) -> Dict[str, Any]:
         q_cols = []
         for transect_name, df in data_list:
             if len(df) != len(out_df):
-                print(
-                    f"Warning: Row count mismatch for {transect_name} "
-                    f"at location {location_id}, LC {lc_id}. Skipping."
+                # See the local branch: a mismatch is corrupt upstream
+                # output, and skipping writes an under-summed q_total.
+                raise AggregationError(
+                    f"Row count mismatch for {transect_name} at location "
+                    f"{location_id}, LC {lc_id}: {len(df)} rows vs "
+                    f"{len(out_df)} in {data_list[0][0]}"
                 )
-                continue
             col = f"q_{_sanitize_header(transect_name)}"
             out_df[col] = df["overtopping_rate"].values
             q_cols.append(col)
-
-        if not q_cols:
-            print(
-                f"Warning: No compatible transect responses for location {location_id}, "
-                f"LC {lc_id}. Skipping."
-            )
-            continue
 
         out_df["q_total"] = out_df[q_cols].sum(axis=1)
         out_name = f"q_aggregate_loc_{location_id}_lc_{lc_id}.parquet"
