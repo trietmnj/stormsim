@@ -5,6 +5,7 @@ import warnings
 from typing import Dict, Any, Optional, List
 
 from .processing import process_lc_file
+from .aggregation import aggregate_q
 from ..utilities.storage import StorageContext
 
 def run_eurotop(config: Dict[str, Any], is_lambda: bool = False, storage_context: Optional[StorageContext] = None) -> Dict[str, Any]:
@@ -61,4 +62,23 @@ def run_eurotop(config: Dict[str, Any], is_lambda: bool = False, storage_context
             # for now passing the raw path which pandas can handle if s3://
             process_lc_file(lc_file, config, pse_xsec, s_v_file, transect_outpath)
 
-    return {"status": "success", "output": outpath}
+    # Aggregation is a post-processing step; preserve the completed transect outputs
+    # when it cannot run.
+    try:
+        aggregation_result = aggregate_q(outpath)
+    except Exception as error:
+        print(f"Warning: Response aggregation failed: {error}")
+        return {
+            "status": "success",
+            "output": outpath,
+            "aggregated": 0,
+            "aggregation_error": str(error),
+        }
+
+    return {
+        "status": "success",
+        "output": outpath,
+        "aggregated": aggregation_result["pairs_written"],
+        "pairs_written": aggregation_result["pairs_written"],
+        "output_paths": aggregation_result["output_paths"],
+    }
