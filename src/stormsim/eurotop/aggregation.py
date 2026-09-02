@@ -32,9 +32,13 @@ def aggregate_q(transect_sim_path: str) -> Dict[str, Any]:
     Input directory layout:
         <transect_sim_path>/
             <transect_name>/
-                <lifecycle_filename>_responses_loc_<N>_lc_<M>.parquet
+                <lifecycle_filename>_responses_loc_<ID>_lc_<M>.parquet
                                                     # must contain overtopping_rate
                 stage_*.parquet                      # ignored
+
+    <ID> is the location_id as written by _save_results — an opaque string
+    of letters, digits, and dashes (e.g. DE001). An id containing "_" is
+    ambiguous against the _lc_ separator and is not supported.
 
     Returns a dict describing what was actually written:
         {"pairs_written": <int>, "output_paths": [<str>, ...]}
@@ -54,7 +58,7 @@ def aggregate_q(transect_sim_path: str) -> Dict[str, Any]:
             f"Aggregation input is not a directory: {transect_sim_path}"
         )
 
-    aggregation_map: Dict[Tuple[int, int], List[Tuple[str, pd.DataFrame]]] = {}
+    aggregation_map: Dict[Tuple[str, int], List[Tuple[str, pd.DataFrame]]] = {}
 
     print(f"Scanning directory: {transect_sim_path}")
     subfolders = [d for d in base_path.iterdir() if d.is_dir()]
@@ -65,10 +69,10 @@ def aggregate_q(transect_sim_path: str) -> Dict[str, Any]:
         for file_path in transect_dir.glob("*.parquet"):
             if file_path.name.startswith("stage_"):
                 continue
-            match = re.search(r"loc_(\d+)_lc_(\d+)", file_path.name)
+            match = re.search(r"loc_([A-Za-z0-9-]+)_lc_(\d+)", file_path.name)
             if not match:
                 continue
-            key = (int(match.group(1)), int(match.group(2)))
+            key = (match.group(1), int(match.group(2)))
             try:
                 df = pd.read_parquet(file_path)
                 if "overtopping_rate" not in df.columns:
@@ -137,7 +141,7 @@ def _aggregate_q_s3(transect_sim_path: str) -> Dict[str, Any]:
     prefix = parsed.path.lstrip("/").rstrip("/") + "/"
     s3 = boto3.client("s3")
     paginator = s3.get_paginator("list_objects_v2")
-    aggregation_map: Dict[Tuple[int, int], List[Tuple[str, pd.DataFrame]]] = {}
+    aggregation_map: Dict[Tuple[str, int], List[Tuple[str, pd.DataFrame]]] = {}
 
     for page in paginator.paginate(Bucket=parsed.netloc, Prefix=prefix):
         for obj in page.get("Contents", []):
@@ -153,7 +157,7 @@ def _aggregate_q_s3(transect_sim_path: str) -> Dict[str, Any]:
             if not filename.endswith(".parquet") or filename.startswith("stage_"):
                 continue
 
-            match = re.search(r"loc_(\d+)_lc_(\d+)", filename)
+            match = re.search(r"loc_([A-Za-z0-9-]+)_lc_(\d+)", filename)
             if not match:
                 continue
 
@@ -163,7 +167,7 @@ def _aggregate_q_s3(transect_sim_path: str) -> Dict[str, Any]:
                 if "overtopping_rate" not in df.columns:
                     print(f"Warning: Missing overtopping_rate column: {file_path}")
                     continue
-                key_pair = (int(match.group(1)), int(match.group(2)))
+                key_pair = (match.group(1), int(match.group(2)))
                 aggregation_map.setdefault(key_pair, []).append((parts[0], df))
             except Exception as e:
                 print(f"Warning: Failed to read {file_path}: {e}")

@@ -76,7 +76,7 @@ class _FakeS3Client:
 def test_aggregate_q_s3_ignores_nested_keys(monkeypatch):
     """A nested copy under a transect prefix must not double-count q_total."""
     prefix = "runs/outputs"
-    filename = "lifecycle_responses_loc_1_lc_1.parquet"
+    filename = "lifecycle_responses_loc_DE001_lc_1.parquet"
     keys = [
         f"{prefix}/transect-one/{filename}",
         f"{prefix}/transect-one/archive/{filename}",  # nested duplicate
@@ -110,7 +110,28 @@ def test_aggregate_q_s3_ignores_nested_keys(monkeypatch):
     result = aggregate_q(f"s3://bucket/{prefix}")
 
     assert result["pairs_written"] == 1
+    (out_path,) = written.keys()
+    assert out_path.endswith("q_aggregate_loc_DE001_lc_1.parquet")
     (out_df,) = written.values()
     assert out_df["q_transect_one"].tolist() == [0.1, 0.2]
     assert out_df["q_transect_two"].tolist() == [0.3, 0.4]
     assert out_df["q_total"].tolist() == [0.1 + 0.3, 0.2 + 0.4]
+
+
+def test_aggregate_q_accepts_string_location_ids(tmp_path):
+    transect_one = tmp_path / "transect-one"
+    transect_two = tmp_path / "transect-two"
+    transect_one.mkdir()
+    transect_two.mkdir()
+    filename = "lifecycle_responses_loc_DE001_lc_0.parquet"
+    _write_response(transect_one, filename, [0.1, 0.2])
+    _write_response(transect_two, filename, [0.3, 0.4])
+
+    result = aggregate_q(str(tmp_path))
+
+    output_path = (
+        tmp_path / "aggregate_responses" / "q_aggregate_loc_DE001_lc_0.parquet"
+    )
+    assert result == {"pairs_written": 1, "output_paths": [str(output_path)]}
+    output = pd.read_parquet(output_path)
+    assert output["q_total"].tolist() == [0.1 + 0.3, 0.2 + 0.4]
